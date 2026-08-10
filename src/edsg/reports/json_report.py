@@ -13,11 +13,22 @@ from pathlib import Path
 
 from edsg.core.canonical import pretty_text
 from edsg.core.standings import StandingsReport
+from edsg.reports.style import ReportStyle
 
 
-def build_payload(report: StandingsReport) -> dict:
+def build_payload(report: StandingsReport, style: ReportStyle | None = None) -> dict:
     """Return the full report structure."""
+    style = style or ReportStyle()
     payload = report.to_dict()
+    if style.has_branding:
+        payload["branding"] = {
+            "squadron_name": style.branding.squadron_name,
+            "squadron_tag": style.branding.squadron_tag,
+            "contacts": [
+                {"kind": label, "value": value}
+                for label, value in style.contact_lines()
+            ],
+        }
     payload["criteria_index"] = {
         criterion.criterion_id: {
             "label": criterion.label,
@@ -34,10 +45,12 @@ def build_payload(report: StandingsReport) -> dict:
     return payload
 
 
-def write_json(report: StandingsReport, path: Path) -> Path:
+def write_json(
+    report: StandingsReport, path: Path, style: ReportStyle | None = None
+) -> Path:
     """Write the JSON report to ``path``."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(pretty_text(build_payload(report)) + "\n", encoding="utf-8")
+    path.write_text(pretty_text(build_payload(report, style)) + "\n", encoding="utf-8")
     return path
 
 

@@ -11,6 +11,7 @@ and only totals are shown, because an unreadable table helps nobody.
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -19,6 +20,7 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
+    Image,
     PageBreak,
     Paragraph,
     SimpleDocTemplate,
@@ -29,17 +31,37 @@ from reportlab.platypus import (
 
 from edsg.core.standings import StandingsReport
 from edsg.reports.common import format_points, format_units, summary_lines
+from edsg.reports.style import ReportStyle
 
 #: Beyond this many criteria the detail columns are omitted.
 MAX_DETAIL_COLUMNS = 8
 
-ACCENT = colors.HexColor("#c25400")
-HEADER_BG = colors.HexColor("#1b2027")
+#: The PDF prints on white regardless of the chosen theme — a dark
+#: report wastes a cartridge and reads badly on paper. The theme supplies
+#: the accent and the header tone; everything else is print-appropriate.
+PAPER_TEXT = colors.HexColor("#1a1f27")
+PAPER_MUTED = colors.HexColor("#55606e")
 ROW_ALT = colors.HexColor("#f4f5f7")
 LINE = colors.HexColor("#c9ced6")
 
 
-def _styles() -> dict[str, ParagraphStyle]:
+def _accent(style: ReportStyle) -> colors.Color:
+    """Return the theme accent, darkened if it would be faint on white."""
+    accent = colors.HexColor(style.palette.accent)
+    # Yellows and light blues vanish against paper; nudge them darker
+    # until they carry against white.
+    while _luminance(accent) > 0.45:
+        accent = colors.Color(
+            accent.red * 0.82, accent.green * 0.82, accent.blue * 0.82
+        )
+    return accent
+
+
+def _luminance(colour: colors.Color) -> float:
+    return 0.2126 * colour.red + 0.7152 * colour.green + 0.0722 * colour.blue
+
+
+def _styles(accent: colors.Color) -> dict[str, ParagraphStyle]:
     base = getSampleStyleSheet()
     return {
         "title": ParagraphStyle(
@@ -48,7 +70,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             fontSize=20,
             leading=24,
             alignment=TA_LEFT,
-            textColor=ACCENT,
+            textColor=accent,
             spaceAfter=2,
         ),
         "tagline": ParagraphStyle(
@@ -56,7 +78,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             parent=base["Normal"],
             fontSize=9.5,
             leading=13,
-            textColor=colors.HexColor("#55606e"),
+            textColor=PAPER_MUTED,
             spaceAfter=10,
         ),
         "heading": ParagraphStyle(
@@ -64,7 +86,7 @@ def _styles() -> dict[str, ParagraphStyle]:
             parent=base["Heading2"],
             fontSize=12,
             leading=15,
-            textColor=ACCENT,
+            textColor=accent,
             spaceBefore=14,
             spaceAfter=6,
         ),
@@ -76,23 +98,37 @@ def _styles() -> dict[str, ParagraphStyle]:
             parent=base["Normal"],
             fontSize=7,
             leading=9,
-            textColor=colors.HexColor("#55606e"),
+            textColor=PAPER_MUTED,
+        ),
+        "brand": ParagraphStyle(
+            "EDSGBrand",
+            parent=base["Normal"],
+            fontSize=10,
+            leading=13,
+            textColor=PAPER_TEXT,
+            spaceAfter=1,
         ),
         "footer": ParagraphStyle(
             "EDSGFooter",
             parent=base["Normal"],
             fontSize=7.5,
             leading=10,
-            textColor=colors.HexColor("#6b7480"),
+            textColor=PAPER_MUTED,
         ),
     }
 
 
-def _table_style(header_rows: int = 1) -> TableStyle:
+def _table_style(accent: colors.Color, header_rows: int = 1) -> TableStyle:
+    header_bg = colors.Color(
+        1 - (1 - accent.red) * 0.16,
+        1 - (1 - accent.green) * 0.16,
+        1 - (1 - accent.blue) * 0.16,
+    )
     return TableStyle(
         [
-            ("BACKGROUND", (0, 0), (-1, header_rows - 1), HEADER_BG),
-            ("TEXTCOLOR", (0, 0), (-1, header_rows - 1), colors.white),
+            ("BACKGROUND", (0, 0), (-1, header_rows - 1), header_bg),
+            ("TEXTCOLOR", (0, 0), (-1, header_rows - 1), PAPER_TEXT),
+            ("LINEBELOW", (0, header_rows - 1), (-1, header_rows - 1), 1.1, accent),
             ("FONTNAME", (0, 0), (-1, header_rows - 1), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 8),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -106,7 +142,7 @@ def _table_style(header_rows: int = 1) -> TableStyle:
     )
 
 
-def _summary_flowables(report: StandingsReport, styles) -> list:
+def _summary_flowables(report: StandingsReport, styles, accent) -> list:
     rows = [
         [
             Paragraph(f"<b>{label}</b>", styles["cell"]),
@@ -130,7 +166,7 @@ def _summary_flowables(report: StandingsReport, styles) -> list:
     return [Paragraph("Event summary", styles["heading"]), table]
 
 
-def _criteria_flowables(report: StandingsReport, styles) -> list:
+def _criteria_flowables(report: StandingsReport, styles, accent) -> list:
     rows = [
         [
             Paragraph("<b>#</b>", styles["cell"]),
@@ -147,11 +183,11 @@ def _criteria_flowables(report: StandingsReport, styles) -> list:
             ]
         )
     table = Table(rows, colWidths=[10 * mm, 55 * mm, 195 * mm], hAlign="LEFT")
-    table.setStyle(_table_style())
+    table.setStyle(_table_style(accent))
     return [Paragraph("Scoring criteria", styles["heading"]), table]
 
 
-def _standings_flowables(report: StandingsReport, styles) -> list:
+def _standings_flowables(report: StandingsReport, styles, accent) -> list:
     event = report.event
     flowables = [Paragraph("Standings", styles["heading"])]
 
@@ -208,7 +244,7 @@ def _standings_flowables(report: StandingsReport, styles) -> list:
         widths = [20 * mm, 90 * mm, 30 * mm]
 
     table = Table(rows, colWidths=widths, repeatRows=1, hAlign="LEFT")
-    table.setStyle(_table_style())
+    table.setStyle(_table_style(accent))
     flowables.append(table)
 
     if not show_detail:
@@ -224,7 +260,7 @@ def _standings_flowables(report: StandingsReport, styles) -> list:
     return flowables
 
 
-def _rejected_flowables(report: StandingsReport, styles) -> list:
+def _rejected_flowables(report: StandingsReport, styles, accent) -> list:
     if not report.rejected:
         return []
     rows = [
@@ -244,11 +280,11 @@ def _rejected_flowables(report: StandingsReport, styles) -> list:
             ]
         )
     table = Table(rows, colWidths=[60 * mm, 50 * mm, 150 * mm], hAlign="LEFT")
-    table.setStyle(_table_style())
+    table.setStyle(_table_style(accent))
     return [Paragraph("Rejected submissions", styles["heading"]), table]
 
 
-def _audit_flowables(report: StandingsReport, styles) -> list:
+def _audit_flowables(report: StandingsReport, styles, accent) -> list:
     rows = [
         [
             Paragraph("<b>Commander</b>", styles["cell"]),
@@ -276,7 +312,7 @@ def _audit_flowables(report: StandingsReport, styles) -> list:
         colWidths=[55 * mm, 32 * mm, 78 * mm, 55 * mm, 25 * mm],
         hAlign="LEFT",
     )
-    table.setStyle(_table_style())
+    table.setStyle(_table_style(accent))
     note = Paragraph(
         "Signatures confirm each file is unchanged since the participant "
         "generated it. They do not attest to the contents of the underlying "
@@ -284,6 +320,54 @@ def _audit_flowables(report: StandingsReport, styles) -> list:
         styles["cell_small"],
     )
     return [Paragraph("Submission audit", styles["heading"]), table, Spacer(1, 4), note]
+
+
+def _masthead(style: ReportStyle, styles, accent) -> list:
+    """Return the branding block, or nothing when none is configured."""
+    if not style.has_branding:
+        return []
+
+    left: list = []
+    logo = style.logo_path()
+    if logo is not None:
+        try:
+            image = Image(str(logo))
+            ratio = image.imageHeight / float(image.imageWidth or 1)
+            image.drawWidth = min(45 * mm, image.imageWidth * 0.75)
+            image.drawHeight = image.drawWidth * ratio
+            if image.drawHeight > 20 * mm:
+                image.drawHeight = 20 * mm
+                image.drawWidth = image.drawHeight / (ratio or 1)
+            image.hAlign = "LEFT"
+            left.append(image)
+        except Exception:
+            pass
+
+    heading = style.heading()
+    if heading:
+        left.append(Paragraph(f"<b>{escape(heading)}</b>", styles["brand"]))
+    for label, value in style.contact_lines():
+        left.append(
+            Paragraph(
+                f'<font color="#6b7480">{escape(label)}</font>&nbsp;{escape(value)}',
+                styles["cell_small"],
+            )
+        )
+    if not left:
+        return []
+
+    table = Table([[left]], colWidths=[120 * mm], hAlign="LEFT")
+    table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LINEBELOW", (0, 0), (-1, -1), 1.2, accent),
+            ]
+        )
+    )
+    return [table, Spacer(1, 8)]
 
 
 def _footer(canvas, document) -> None:
@@ -301,10 +385,14 @@ def _footer(canvas, document) -> None:
     canvas.restoreState()
 
 
-def write_pdf(report: StandingsReport, path: Path) -> Path:
+def write_pdf(
+    report: StandingsReport, path: Path, style: ReportStyle | None = None
+) -> Path:
     """Write the PDF report to ``path``."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    styles = _styles()
+    style = style or ReportStyle()
+    accent = _accent(style)
+    styles = _styles(accent)
     event = report.event
 
     document = SimpleDocTemplate(
@@ -319,16 +407,17 @@ def write_pdf(report: StandingsReport, path: Path) -> Path:
         subject="Elite Dangerous event standings",
     )
 
-    story: list = [Paragraph(event.name, styles["title"])]
-    if event.description:
-        story.append(Paragraph(event.description, styles["tagline"]))
+    story: list = _masthead(style, styles, accent)
+    story.append(Paragraph(escape(event.name), styles["title"]))
+    if event.description and event.description != event.name:
+        story.append(Paragraph(escape(event.description), styles["tagline"]))
 
-    story.extend(_summary_flowables(report, styles))
-    story.extend(_standings_flowables(report, styles))
+    story.extend(_summary_flowables(report, styles, accent))
+    story.extend(_standings_flowables(report, styles, accent))
     story.append(PageBreak())
-    story.extend(_criteria_flowables(report, styles))
-    story.extend(_rejected_flowables(report, styles))
-    story.extend(_audit_flowables(report, styles))
+    story.extend(_criteria_flowables(report, styles, accent))
+    story.extend(_rejected_flowables(report, styles, accent))
+    story.extend(_audit_flowables(report, styles, accent))
 
     document.build(story, onFirstPage=_footer, onLaterPages=_footer)
     return path

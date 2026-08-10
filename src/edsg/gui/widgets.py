@@ -7,7 +7,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QUrl, Signal, Slot
+from PySide6.QtCore import (
+    QObject,
+    QRunnable,
+    Qt,
+    QThreadPool,
+    QTimer,
+    QUrl,
+    Signal,
+    Slot,
+)
 from PySide6.QtGui import QDesktopServices, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -48,10 +57,19 @@ class Worker(QRunnable):
     Qt widgets may only be touched from the UI thread, so the callable
     never receives one. It is handed a ``report`` function it may call
     with any payload; that payload arrives back as a ``progress`` signal.
+
+    Lifetime is managed from Python rather than by the thread pool. With
+    Qt's default ``autoDelete``, the runnable is destroyed in C++ the
+    moment ``run`` returns, which can tear down the signals object while
+    a queued emission from it is still waiting to be delivered on the UI
+    thread. The result is a segfault inside the event loop with no Python
+    traceback to explain it, and it surfaces only when one task overlaps
+    another.
     """
 
     def __init__(self, work: Callable[[Callable[[Any], None]], Any]) -> None:
         super().__init__()
+        self.setAutoDelete(False)
         self.work = work
         self.signals = WorkerSignals()
 
@@ -65,6 +83,13 @@ class Worker(QRunnable):
             self.signals.finished.emit(result)
 
 
+#: Workers that have been started and have not yet reported a result.
+#: Holding a strong reference here is what keeps each worker, and the
+#: signals object it emits from, alive for as long as Qt might still be
+#: delivering from it.
+_ACTIVE_WORKERS: set[Worker] = set()
+
+
 def run_in_background(
     work: Callable[[Callable[[Any], None]], Any],
     on_finished: Callable[[Any], None],
@@ -73,12 +98,34 @@ def run_in_background(
 ) -> Worker:
     """Start ``work`` on the global thread pool and wire up its signals."""
     worker = Worker(work)
+    _ACTIVE_WORKERS.add(worker)
+
+    def release(_payload: Any) -> None:
+        # Deferred by one turn of the event loop so the reference
+        # outlives the emission currently being delivered.
+        QTimer.singleShot(0, lambda: _ACTIVE_WORKERS.discard(worker))
+
     worker.signals.finished.connect(on_finished)
     worker.signals.failed.connect(on_failed)
     if on_progress is not None:
         worker.signals.progress.connect(on_progress)
+    # Connected last so the caller's handler runs before the reference
+    # is dropped.
+    worker.signals.finished.connect(release)
+    worker.signals.failed.connect(release)
+
     QThreadPool.globalInstance().start(worker)
     return worker
+
+
+def wait_for_workers(timeout_ms: int = 10_000) -> bool:
+    """Block until background work finishes. Returns whether it drained.
+
+    Called when a window closes. Letting the interpreter shut down while
+    a pool thread is still executing Python is another route to a crash
+    on exit, and a journal scan can take several seconds.
+    """
+    return QThreadPool.globalInstance().waitForDone(timeout_ms)
 
 
 # --------------------------------------------------------------------- #
@@ -419,5 +466,6 @@ __all__ = [
     "show_info",
     "show_warning",
     "to_utc",
+    "wait_for_workers",
     "window_title",
 ]

@@ -15,6 +15,7 @@ from edsg.reports.common import (
     format_units,
     summary_lines,
 )
+from edsg.reports.style import ReportStyle
 
 
 def _escape(text: str) -> str:
@@ -22,12 +23,25 @@ def _escape(text: str) -> str:
     return str(text).replace("|", "\\|")
 
 
-def build_markdown(report: StandingsReport) -> str:
+def build_markdown(report: StandingsReport, style: ReportStyle | None = None) -> str:
     """Render the whole report as Markdown."""
+    style = style or ReportStyle()
     event = report.event
-    lines: list[str] = [f"# {event.name}", ""]
+    lines: list[str] = []
 
-    if event.description:
+    # Branding first, so a pasted report is attributable at a glance.
+    if style.has_branding:
+        heading = style.heading()
+        if heading:
+            lines.append(f"**{_escape(heading)}**")
+        for label, value in style.contact_lines():
+            lines.append(f"{_escape(label)}: {_escape(value)}  ")
+        if lines:
+            lines.append("")
+
+    lines.extend([f"# {event.name}", ""])
+
+    if event.description and event.description != event.name:
         lines.extend([event.description, ""])
 
     lines.append("## Event summary")
@@ -120,10 +134,12 @@ def build_markdown(report: StandingsReport) -> str:
     return "\n".join(lines)
 
 
-def write_markdown(report: StandingsReport, path: Path) -> Path:
+def write_markdown(
+    report: StandingsReport, path: Path, style: ReportStyle | None = None
+) -> Path:
     """Write the Markdown report to ``path``."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(build_markdown(report), encoding="utf-8")
+    path.write_text(build_markdown(report, style), encoding="utf-8")
     return path
 
 

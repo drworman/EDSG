@@ -9,6 +9,7 @@ from edsg.reports.html_report import write_html
 from edsg.reports.json_report import write_json
 from edsg.reports.markdown_report import write_markdown
 from edsg.reports.pdf_report import write_pdf
+from edsg.reports.style import ReportStyle, default_style
 
 #: Report writers keyed by the file extension they produce.
 WRITERS = {
@@ -19,13 +20,19 @@ WRITERS = {
 }
 
 
-def write_all(report: StandingsReport, directory: Path, stem: str) -> list[Path]:
+def write_all(
+    report: StandingsReport,
+    directory: Path,
+    stem: str,
+    style: ReportStyle | None = None,
+) -> list[Path]:
     """Write every report format into ``directory``.
 
     A failure in one format does not prevent the others being written;
     the exception is re-raised only after the rest have been attempted,
     so an organizer missing a PDF backend still gets their standings.
     """
+    style = style if style is not None else default_style()
     directory.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     first_error: Exception | None = None
@@ -33,7 +40,7 @@ def write_all(report: StandingsReport, directory: Path, stem: str) -> list[Path]
     for extension, writer in WRITERS.items():
         path = directory / f"{stem}.{extension}"
         try:
-            writer(report, path)
+            writer(report, path, style)
         except Exception as exc:
             if first_error is None:
                 first_error = exc
@@ -47,6 +54,8 @@ def write_all(report: StandingsReport, directory: Path, stem: str) -> list[Path]
 
 __all__ = [
     "WRITERS",
+    "ReportStyle",
+    "default_style",
     "write_all",
     "write_html",
     "write_json",

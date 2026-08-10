@@ -1,8 +1,9 @@
 """HTML standings output.
 
-A single self-contained file: no external stylesheets, fonts or scripts,
-so it can be zipped and mailed, or dropped on a web host, and still look
-the same. The palette follows the game's own orange-on-black HUD.
+A single self-contained file: no external stylesheets, fonts, scripts or
+images, so it can be zipped and mailed, or dropped on a web host, and
+still look the same. Colours come from the organizer's chosen theme and
+the logo is embedded as a data URI.
 """
 
 from __future__ import annotations
@@ -11,98 +12,185 @@ from html import escape
 from pathlib import Path
 
 from edsg.core.standings import StandingsReport
-from edsg.reports.common import (
-    MEDALS,
-    format_points,
-    format_units,
-    summary_lines,
-)
+from edsg.reports.common import MEDALS, format_points, format_units, summary_lines
+from edsg.reports.style import ReportStyle
 
-STYLESHEET = """
-:root {
-  --bg: #0b0d10;
-  --panel: #14181d;
-  --panel-alt: #1b2027;
-  --line: #2b323c;
-  --text: #e8eaed;
-  --muted: #9aa4b2;
-  --accent: #ff7100;
-  --accent-soft: rgba(255, 113, 0, 0.14);
-  --good: #5ac37d;
-  --bad: #e5534b;
-}
-* { box-sizing: border-box; }
-body {
+
+def _stylesheet(style: ReportStyle) -> str:
+    colours = style.palette
+    return f"""
+:root {{
+  --bg: {colours.bg};
+  --surface: {colours.surface};
+  --surface-alt: {colours.surface_alt};
+  --line: {colours.line};
+  --text: {colours.text};
+  --dim: {colours.text_dim};
+  --faint: {colours.text_faint};
+  --accent: {colours.accent};
+  --accent-dim: {colours.accent_dim};
+  --accent-soft: {colours.accent_soft};
+  --header-bg: {colours.header_bg};
+  --header-text: {colours.header_text};
+  --zebra: {colours.zebra};
+  --good: {colours.good};
+  --warn: {colours.warn};
+  --bad: {colours.bad};
+}}
+* {{ box-sizing: border-box; }}
+body {{
   margin: 0;
-  padding: 2rem 1.25rem 4rem;
+  padding: 2.25rem 1.5rem 4rem;
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
   line-height: 1.55;
-}
-.wrap { max-width: 1100px; margin: 0 auto; }
-header {
-  border-bottom: 2px solid var(--accent);
-  padding-bottom: 1rem;
+}}
+.wrap {{ max-width: 1180px; margin: 0 auto; }}
+
+/* ── masthead ──────────────────────────────────────────────────────── */
+.masthead {{
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  border-bottom: 3px solid var(--accent);
+  padding-bottom: 1.1rem;
   margin-bottom: 2rem;
-}
-h1 {
-  margin: 0 0 .35rem;
-  font-size: 2rem;
-  letter-spacing: .04em;
+}}
+.brand {{ flex: 0 0 auto; max-width: 42%; }}
+.brand-logo {{ max-height: 76px; max-width: 220px; display: block;
+  margin-bottom: .5rem; }}
+.brand-name {{ font-size: 1.05rem; font-weight: 700; color: var(--text);
+  letter-spacing: .02em; }}
+.brand-contacts {{ margin: .3rem 0 0; padding: 0; list-style: none;
+  font-size: .8rem; color: var(--dim); }}
+.brand-contacts li {{ white-space: nowrap; }}
+.brand-contacts .k {{ color: var(--faint); text-transform: uppercase;
+  font-size: .68rem; letter-spacing: .06em; margin-right: .35rem; }}
+.titles {{ margin-left: auto; text-align: right; }}
+h1 {{
+  margin: 0 0 .2rem;
+  font-size: 1.9rem;
+  line-height: 1.15;
+  letter-spacing: .03em;
   color: var(--accent);
   text-transform: uppercase;
-}
-h2 {
-  margin: 2.5rem 0 .85rem;
-  font-size: 1.15rem;
+}}
+.tagline {{ color: var(--dim); margin: 0; font-size: .95rem; }}
+.stamp {{ color: var(--faint); font-size: .78rem; margin-top: .35rem; }}
+
+/* ── sections ──────────────────────────────────────────────────────── */
+h2 {{
+  margin: 2.4rem 0 .8rem;
+  font-size: 1rem;
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: .1em;
   color: var(--accent);
-}
-.tagline { color: var(--muted); margin: 0; }
-table {
+  border-left: 3px solid var(--accent);
+  padding-left: .6rem;
+}}
+
+/* ── tables ────────────────────────────────────────────────────────── */
+table {{
   width: 100%;
   border-collapse: collapse;
-  background: var(--panel);
+  background: var(--surface);
   border: 1px solid var(--line);
-  font-size: .93rem;
-}
-caption { caption-side: bottom; padding-top: .6rem; color: var(--muted);
-  font-size: .82rem; text-align: left; }
-th, td { padding: .6rem .75rem; text-align: left;
-  border-bottom: 1px solid var(--line); vertical-align: top; }
-thead th {
-  background: var(--panel-alt);
-  color: var(--muted);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: .92rem;
+}}
+caption {{ caption-side: bottom; padding-top: .65rem; color: var(--dim);
+  font-size: .8rem; text-align: left; }}
+th, td {{ padding: .62rem .8rem; text-align: left;
+  border-bottom: 1px solid var(--line); vertical-align: top; }}
+thead th {{
+  background: var(--header-bg);
+  color: var(--header-text);
   text-transform: uppercase;
-  font-size: .72rem;
-  letter-spacing: .07em;
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .06em;
   white-space: nowrap;
-}
-tbody tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: var(--accent-soft); }
-.num { text-align: right; font-variant-numeric: tabular-nums; }
-.rank { width: 4.5rem; font-weight: 700; }
-.rank-1 { color: var(--accent); }
-.cmdr { font-weight: 600; }
-.total { font-weight: 700; color: var(--accent); font-size: 1.05rem; }
-.sub { display: block; color: var(--muted); font-size: .76rem; }
-.summary td:first-child { color: var(--muted); width: 14rem;
-  text-transform: uppercase; font-size: .74rem; letter-spacing: .06em; }
-code { background: var(--panel-alt); padding: .1rem .35rem;
-  border-radius: 3px; font-size: .85em; color: var(--muted); }
-.empty { color: var(--muted); font-style: italic; padding: 1rem 0; }
-.reject td { color: var(--bad); }
-footer { margin-top: 3rem; padding-top: 1rem;
-  border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
-@media print {
-  body { background: #fff; color: #000; padding: 0; }
-  table { background: #fff; }
-  thead th { background: #eee; color: #000; }
-  h1, h2, .total { color: #000; }
-}
+  border-bottom: 2px solid var(--accent-dim);
+}}
+tbody tr:nth-child(even) {{ background: var(--zebra); }}
+tbody tr:last-child td {{ border-bottom: none; }}
+tbody tr:hover {{ background: var(--accent-soft); }}
+.num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+.rank {{ width: 4.5rem; font-weight: 700; text-align: center; }}
+.rank-1 {{ color: var(--accent); }}
+.cmdr {{ font-weight: 600; }}
+.total {{ font-weight: 700; color: var(--accent); font-size: 1.05rem; }}
+.sub {{ display: block; color: var(--dim); font-size: .76rem;
+  font-weight: 400; }}
+
+/* The summary table reads as a definition list, so its first column is
+   a label rather than data. Dim but not faint: it was previously so low
+   in contrast as to be unreadable at this size. */
+.summary td:first-child {{
+  color: var(--text);
+  background: var(--surface-alt);
+  width: 15rem;
+  font-weight: 600;
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}}
+code {{ background: var(--surface-alt); padding: .12rem .38rem;
+  border-radius: 3px; font-size: .85em; color: var(--text);
+  font-family: "DejaVu Sans Mono", Consolas, Menlo, monospace; }}
+.empty {{ color: var(--dim); font-style: italic; padding: 1rem 0; }}
+.reject td {{ color: var(--bad); }}
+footer {{ margin-top: 3rem; padding-top: 1rem;
+  border-top: 1px solid var(--line); color: var(--dim); font-size: .8rem; }}
+
+@media print {{
+  body {{ background: #fff; color: #000; padding: 0; font-size: 11pt; }}
+  table {{ background: #fff; }}
+  thead th {{ background: #e8e8e8; color: #000;
+    border-bottom: 2px solid #666; }}
+  tbody tr:nth-child(even) {{ background: #f5f5f5; }}
+  .summary td:first-child {{ background: #f0f0f0; color: #000; }}
+  h1, h2, .total, .rank-1 {{ color: #000; }}
+  h2 {{ border-left-color: #666; }}
+  .masthead {{ border-bottom-color: #666; }}
+}}
 """
+
+
+def _masthead(report: StandingsReport, style: ReportStyle) -> str:
+    event = report.event
+    brand = ""
+    if style.has_branding:
+        parts = []
+        logo = style.logo_data_uri()
+        if logo:
+            parts.append(f'<img class="brand-logo" src="{logo}" alt=""/>')
+        heading = style.heading()
+        if heading:
+            parts.append(f'<div class="brand-name">{escape(heading)}</div>')
+        contacts = style.contact_lines()
+        if contacts:
+            items = "".join(
+                f'<li><span class="k">{escape(label)}</span>{escape(value)}</li>'
+                for label, value in contacts
+            )
+            parts.append(f'<ul class="brand-contacts">{items}</ul>')
+        brand = f'<div class="brand">{"".join(parts)}</div>'
+
+    description = (
+        f'<p class="tagline">{escape(event.description)}</p>'
+        if event.description and event.description != event.name
+        else ""
+    )
+    return (
+        f'<div class="masthead">{brand}'
+        f'<div class="titles"><h1>{escape(event.name)}</h1>{description}'
+        f'<div class="stamp">Standings generated {escape(report.generated_at)}'
+        f"</div></div></div>"
+    )
 
 
 def _summary_table(report: StandingsReport) -> str:
@@ -140,9 +228,9 @@ def _standings_table(report: StandingsReport) -> str:
     headers = ["Rank", "Commander", "Points"]
     headers.extend(criterion.label for criterion in event.criteria)
     head = "".join(
-        f"<th class='num'>{escape(name)}</th>"
-        if index != 1
-        else f"<th>{escape(name)}</th>"
+        f"<th>{escape(name)}</th>"
+        if index == 1
+        else f"<th class='num'>{escape(name)}</th>"
         for index, name in enumerate(headers)
     )
 
@@ -211,7 +299,8 @@ def _audit_table(report: StandingsReport) -> str:
             else ""
         )
         rows.append(
-            f"<tr><td class='cmdr'>CMDR {escape(submission.commander_name)}{note}</td>"
+            f"<tr><td class='cmdr'>CMDR {escape(submission.commander_name)}"
+            f"{note}</td>"
             f"<td><code>{escape(submission.commander_fid)}</code></td>"
             f"<td><code>{escape(item.signer_fingerprint)}</code></td>"
             f"<td>{escape(submission.generated_at)}</td>"
@@ -229,37 +318,30 @@ def _audit_table(report: StandingsReport) -> str:
     )
 
 
-def build_html(report: StandingsReport) -> str:
+def build_html(report: StandingsReport, style: ReportStyle | None = None) -> str:
     """Render the whole report as a self-contained HTML document."""
+    style = style or ReportStyle()
     event = report.event
-    description = (
-        f'<p class="tagline">{escape(event.description)}</p>'
-        if event.description
-        else ""
-    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>{escape(event.name)} — EDSG standings</title>
-<style>{STYLESHEET}</style>
+<style>{_stylesheet(style)}</style>
 </head>
 <body>
 <div class="wrap">
-<header>
-<h1>{escape(event.name)}</h1>
-{description}
-</header>
+{_masthead(report, style)}
 
 <h2>Event summary</h2>
 {_summary_table(report)}
 
-<h2>Scoring criteria</h2>
-{_criteria_table(report)}
-
 <h2>Standings</h2>
 {_standings_table(report)}
+
+<h2>Scoring criteria</h2>
+{_criteria_table(report)}
 
 {_rejected_table(report)}
 
@@ -278,11 +360,13 @@ Frontier Developments.
 """
 
 
-def write_html(report: StandingsReport, path: Path) -> Path:
+def write_html(
+    report: StandingsReport, path: Path, style: ReportStyle | None = None
+) -> Path:
     """Write the HTML report to ``path``."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(build_html(report), encoding="utf-8")
+    path.write_text(build_html(report, style), encoding="utf-8")
     return path
 
 
-__all__ = ["STYLESHEET", "build_html", "write_html"]
+__all__ = ["build_html", "write_html"]

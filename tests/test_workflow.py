@@ -259,3 +259,90 @@ def test_invitation_tampering_is_detected(tmp_path, simple_event, identity):
     path.write_text(json.dumps(data))
     with pytest.raises(SignatureError):
         load_invitation(path)
+
+
+def test_preview_does_not_mutate_the_event(
+    tmp_path, make_journal, simple_event, identity
+):
+    """Previewing must leave the event exactly as it was."""
+    from edsg.core.workflow import preview_standings
+
+    invitation = load_invitation(issue_invitation(simple_event, identity, tmp_path))
+    subs = tmp_path / "subs"
+    participate(
+        invitation, mining_journal(make_journal, 12), generate_identity("p"), subs
+    )
+
+    before = (simple_event.state, simple_event.closed_at)
+    report = preview_standings(simple_event, subs, invitation.signer_fingerprint)
+
+    assert (simple_event.state, simple_event.closed_at) == before
+    assert simple_event.state is EventState.OPEN
+    assert report.participant_count == 1
+    assert report.standings[0].total_points == 24.0
+
+
+def test_preview_matches_the_final_standings(
+    tmp_path, make_journal, simple_event, identity
+):
+    """What the organizer previews is what closing will produce."""
+    from edsg.core.workflow import preview_standings
+
+    invitation = load_invitation(issue_invitation(simple_event, identity, tmp_path))
+    subs = tmp_path / "subs"
+    for fid, tonnes in (("F0000001", 10), ("F0000002", 25)):
+        journal = mining_journal(make_journal, tonnes, name=fid, fid=fid)
+        participate(invitation, journal, generate_identity(fid), subs)
+
+    preview = preview_standings(simple_event, subs, invitation.signer_fingerprint)
+    final = close_event(simple_event, subs, invitation.signer_fingerprint)
+
+    assert [(s.rank, s.commander_fid, s.total_points) for s in preview.standings] == [
+        (s.rank, s.commander_fid, s.total_points) for s in final.standings
+    ]
+
+
+def test_preview_reports_submissions_that_would_be_rejected(
+    tmp_path, make_journal, simple_event, identity
+):
+    """A bad file must show up before the event is closed, not after."""
+    from edsg.core.workflow import preview_standings
+
+    invitation = load_invitation(issue_invitation(simple_event, identity, tmp_path))
+    subs = tmp_path / "subs"
+    participate(
+        invitation, mining_journal(make_journal, 5), generate_identity("p"), subs
+    )
+    (subs / "F9999999.edsgs").write_text('{"not": "an edsg file"}')
+
+    report = preview_standings(simple_event, subs, invitation.signer_fingerprint)
+    assert report.participant_count == 1
+    assert len(report.rejected) == 1
+    assert "F9999999" in report.rejected[0].path.name
+
+
+def test_preview_works_before_the_event_is_issued(
+    tmp_path, make_journal, simple_event, identity
+):
+    """Preview must not require the OPEN state that closing does."""
+    from edsg.core.workflow import preview_standings
+
+    invitation = load_invitation(issue_invitation(simple_event, identity, tmp_path))
+    subs = tmp_path / "subs"
+    participate(
+        invitation, mining_journal(make_journal, 7), generate_identity("p"), subs
+    )
+
+    simple_event.state = EventState.DRAFT
+    report = preview_standings(simple_event, subs)
+    assert report.participant_count == 1
+    assert simple_event.state is EventState.DRAFT
+
+
+def test_preview_with_no_submissions_is_an_error(tmp_path, simple_event):
+    from edsg.core.workflow import preview_standings
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(DocumentError, match="No submission files"):
+        preview_standings(simple_event, empty)

@@ -125,3 +125,218 @@ def test_participant_window_builds(app, tmp_path, monkeypatch):
         assert not window.save_button.isEnabled()
     finally:
         window.deleteLater()
+
+
+def test_worker_reference_is_held_until_it_reports(app):
+    """A running worker must not be collectable.
+
+    Losing the reference lets Qt destroy the signals object while a
+    queued emission is still in flight, which segfaults inside the event
+    loop with no Python traceback.
+    """
+    import gc
+
+    from edsg.gui import widgets
+
+    started = widgets.run_in_background(
+        lambda report: "value", lambda r: None, lambda e: None
+    )
+    assert started in widgets._ACTIVE_WORKERS
+    gc.collect()
+    assert started in widgets._ACTIVE_WORKERS
+    assert widgets.wait_for_workers(5000)
+
+
+def test_workers_do_not_autodelete(app):
+    """Qt must not own the runnable; Python does."""
+    from edsg.gui.widgets import Worker
+
+    worker = Worker(lambda report: None)
+    assert worker.autoDelete() is False
+
+
+def test_preview_populates_the_standings_table(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path / "cfg"))
+
+    from edsg.core.criteria import Criterion, Filters
+    from edsg.core.crypto import generate_identity
+    from edsg.core.journal import parse_timestamp
+    from edsg.core.models import (
+        Eligibility,
+        EventDefinition,
+        EventState,
+        EventWindow,
+    )
+    from edsg.core.workflow import issue_invitation, load_invitation, participate
+    from edsg.gui.organizer import OrganizerWindow
+    from edsg.gui.widgets import wait_for_workers
+
+    event = EventDefinition(
+        name="Preview Test",
+        window=EventWindow(
+            start=parse_timestamp("2026-06-01T00:00:00Z"),
+            end=parse_timestamp("2026-06-30T23:59:59Z"),
+        ),
+        eligibility=Eligibility.OPEN,
+        criteria=[
+            Criterion(
+                criterion_id="m1",
+                label="Tritium",
+                kind=MetricKind.MINING_REFINED,
+                measure=Measure.TONNAGE,
+                filters=Filters(commodities=["Tritium"]),
+                points_per_unit=1.0,
+            )
+        ],
+    )
+    invitation = load_invitation(
+        issue_invitation(event, generate_identity("org"), tmp_path)
+    )
+
+    import json as _json
+
+    journal = tmp_path / "journal"
+    journal.mkdir()
+    events = [
+        {
+            "timestamp": "2026-06-01T12:00:01Z",
+            "event": "Commander",
+            "FID": "F1",
+            "Name": "PREVIEW",
+        },
+        *(
+            {
+                "timestamp": "2026-06-05T10:00:00Z",
+                "event": "MiningRefined",
+                "Type": "$tritium_name;",
+                "Type_Localised": "Tritium",
+            }
+            for _ in range(9)
+        ),
+    ]
+    (journal / "Journal.2026-06-01T120000.01.log").write_text(
+        "\n".join(_json.dumps(item) for item in events), encoding="utf-8"
+    )
+    subs = tmp_path / "subs"
+    participate(invitation, journal, generate_identity("p"), subs)
+
+    window = OrganizerWindow()
+    try:
+        window.event_def = event
+        window.event_def.state = EventState.OPEN
+        window._populate()
+        window.submissions_picker.set_path(subs)
+        window._preview_standings()
+        assert wait_for_workers(10_000)
+        app.processEvents()
+
+        assert window.standings_tree.topLevelItemCount() == 1
+        assert "Preview" in window.standings_status.text()
+        # The whole point: previewing must not close anything.
+        assert window.event_def.state is EventState.OPEN
+        assert window.event_def.closed_at is None
+    finally:
+        window.deleteLater()
+
+
+def test_support_links_open_their_destinations(app, monkeypatch):
+    """Each funding button must hand its own URL to the browser.
+
+    Guards two things a screenshot cannot: that the buttons are wired at
+    all, and that the lambda captures each link rather than closing over
+    the loop variable and sending everyone to PayPal.
+    """
+    from PySide6.QtWidgets import QPushButton
+
+    from edsg.gui import about
+
+    opened: list[str] = []
+
+    class Opens:
+        @staticmethod
+        def openUrl(url):
+            opened.append(url.toString())
+            return True
+
+    monkeypatch.setattr(about, "QDesktopServices", Opens)
+
+    strip = about.SupportStrip()
+    buttons = strip.findChildren(QPushButton)
+    assert len(buttons) == len(about.funding_links())
+
+    for widget in buttons:
+        widget.click()
+
+    assert opened == [link.url for link in about.funding_links()]
+    strip.deleteLater()
+
+
+def test_failed_link_shows_the_address(app, monkeypatch):
+    """A browser that will not open must not look like a dead button."""
+    from PySide6.QtWidgets import QPushButton
+
+    from edsg.gui import about
+
+    class Refuses:
+        @staticmethod
+        def openUrl(url):
+            return False
+
+    shown: list[str] = []
+    monkeypatch.setattr(about, "QDesktopServices", Refuses)
+    monkeypatch.setattr(
+        about,
+        "show_info",
+        lambda parent, title, message, detail="": shown.append(detail),
+    )
+
+    strip = about.SupportStrip()
+    for widget in strip.findChildren(QPushButton):
+        widget.click()
+
+    assert shown == [link.url for link in about.funding_links()]
+    strip.deleteLater()
+
+
+def test_help_menu_offers_every_support_link(app, tmp_path, monkeypatch):
+    """The same destinations must be reachable from the menu bar."""
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path / "cfg"))
+    import gc
+
+    from edsg.gui.about import funding_links
+    from edsg.gui.organizer import OrganizerWindow
+
+    window = OrganizerWindow()
+    try:
+        # Reading a menu twice is exactly what broke before: PySide6
+        # returns a new wrapper each time, and dropping one destroyed the
+        # menu. This test asserts the fix by doing precisely that.
+        menus = {
+            action.text().replace("&", ""): action.menu()
+            for action in window.menuBar().actions()
+            if action.menu() is not None
+        }
+        gc.collect()
+        assert set(menus) == {"File", "Options", "Help"}
+
+        help_items = {
+            action.text().replace("&", "") for action in menus["Help"].actions()
+        }
+        assert "About EDSG" in help_items
+        assert "Documentation" in help_items
+        assert "Project on GitHub" in help_items
+
+        options_items = {
+            action.text().replace("&", "") for action in menus["Options"].actions()
+        }
+        assert any(item.startswith("Preferences") for item in options_items)
+
+        support = next(
+            action.menu()
+            for action in menus["Help"].actions()
+            if action.menu() is not None
+        )
+        offered = {action.text().replace("&", "") for action in support.actions()}
+        assert {link.label for link in funding_links()} == offered
+    finally:
+        window.deleteLater()

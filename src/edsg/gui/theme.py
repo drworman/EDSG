@@ -14,24 +14,35 @@ from __future__ import annotations
 from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import QApplication
 
-COLOURS: dict[str, str] = {
-    "bg": "#0f1216",
-    "surface": "#171c22",
-    "surface_alt": "#1e242c",
-    "surface_hi": "#262e38",
-    "line": "#2f3843",
-    "line_soft": "#242c35",
-    "text": "#e7ebef",
-    "text_dim": "#9aa5b1",
-    "text_faint": "#6d7885",
-    "accent": "#ff7a1a",
-    "accent_dim": "#c25400",
-    "accent_soft": "#3a2312",
-    "good": "#4fb477",
-    "warn": "#e0a33a",
-    "bad": "#e05a52",
-    "info": "#4a9edd",
-}
+from edsg.core.palettes import DEFAULT_PALETTE, Palette, get_palette
+
+
+def _colours_from(palette: Palette) -> dict[str, str]:
+    """Expand a core palette into the keys the stylesheet uses."""
+    return {
+        "bg": palette.bg,
+        "surface": palette.surface,
+        "surface_alt": palette.surface_alt,
+        "surface_hi": palette.header_bg,
+        "line": palette.line,
+        "line_soft": palette.zebra,
+        "text": palette.text,
+        "text_dim": palette.text_dim,
+        "text_faint": palette.text_faint,
+        "accent": palette.accent,
+        "accent_dim": palette.accent_dim,
+        "accent_soft": palette.zebra,
+        "good": palette.good,
+        "warn": palette.warn,
+        "bad": palette.bad,
+        "info": palette.accent,
+    }
+
+
+#: The active colours. Mutated in place by :func:`apply_theme` so the
+#: modules that imported this dict at import time keep seeing the current
+#: theme without every one of them needing a refresh hook.
+COLOURS: dict[str, str] = _colours_from(get_palette(DEFAULT_PALETTE))
 
 #: Point sizes, scaled by the platform's default UI font.
 FONT_SIZES = {"title": 17, "heading": 11, "body": 10, "small": 9}
@@ -121,6 +132,14 @@ QPushButton[role="primary"]:disabled {{
 }}
 QPushButton[role="danger"] {{ border-color: {c["bad"]}; color: {c["bad"]}; }}
 QPushButton[role="danger"]:hover {{ background-color: #3a1f1d; }}
+QPushButton[role="support"] {{
+    background: transparent;
+    border: none;
+    color: {c["text_dim"]};
+    padding: 1px 4px;
+    font-size: {FONT_SIZES["small"]}pt;
+}}
+QPushButton[role="support"]:hover {{ color: {c["accent"]}; }}
 QPushButton[role="link"] {{
     background: transparent; border: none; color: {c["info"]};
     padding: 2px 4px; text-decoration: underline;
@@ -300,13 +319,20 @@ QScrollArea > QWidget > QWidget {{ background: transparent; }}
 """
 
 
-def apply_theme(app: QApplication) -> None:
-    """Apply the EDSG look to an application instance.
+def apply_theme(app: QApplication, palette: Palette | None = None) -> None:
+    """Apply a theme to an application instance.
 
     Fusion is forced because the native Windows and macOS styles ignore
     large parts of a stylesheet, which would leave the two platforms
     looking unlike the Linux build for no benefit.
+
+    Passing a palette re-themes a running application; the change takes
+    effect immediately because Qt re-evaluates the stylesheet on every
+    widget when it is set.
     """
+    if palette is not None:
+        COLOURS.update(_colours_from(palette))
+
     app.setStyle("Fusion")
 
     palette = QPalette()
@@ -322,6 +348,10 @@ def apply_theme(app: QApplication) -> None:
     palette.setColor(QPalette.ToolTipBase, QColor(COLOURS["surface_hi"]))
     palette.setColor(QPalette.ToolTipText, QColor(COLOURS["text"]))
     palette.setColor(QPalette.PlaceholderText, QColor(COLOURS["text_faint"]))
+    # Rich-text anchors otherwise render in the system blue, which
+    # fights every theme.
+    palette.setColor(QPalette.Link, QColor(COLOURS["accent"]))
+    palette.setColor(QPalette.LinkVisited, QColor(COLOURS["accent_dim"]))
     palette.setColor(QPalette.Disabled, QPalette.Text, QColor(COLOURS["text_faint"]))
     palette.setColor(
         QPalette.Disabled, QPalette.ButtonText, QColor(COLOURS["text_faint"])

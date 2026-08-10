@@ -11,10 +11,14 @@ from __future__ import annotations
 import contextlib
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 APP_NAME = "EDSG"
 APP_DIRNAME = "edsg"
+
+#: Folder created beside the binary to hold every event's working files.
+EVENTS_DIRNAME = "Events"
 
 
 def _windows_appdata() -> Path:
@@ -62,6 +66,93 @@ def ensure_config_dir() -> Path:
 def keys_dir() -> Path:
     """Return the directory holding signing identities."""
     return config_dir() / "keys"
+
+
+def app_root() -> Path:
+    """Return the directory EDSG treats as its workspace root.
+
+    For a downloaded binary this is the folder the binary sits in, so an
+    organizer can keep the executable and its events together on a stick
+    or in a synced folder and have everything travel as one unit. Running
+    from source it is the current working directory instead, because the
+    source tree is not where anyone wants their event data.
+
+    ``EDSG_HOME`` overrides both.
+    """
+    override = os.environ.get("EDSG_HOME")
+    if override:
+        return Path(override).expanduser()
+
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path.cwd()
+
+
+def events_root() -> Path:
+    """Return the folder holding every event's working files."""
+    return app_root() / EVENTS_DIRNAME
+
+
+def safe_folder_name(name: str) -> str:
+    """Turn an event name into something every filesystem accepts.
+
+    Windows forbids ``<>:"/\\|?*`` and trailing dots or spaces; a name
+    like ``Test Event #1`` also wants tidying rather than escaping.
+    """
+    cleaned = "".join(
+        character if character.isalnum() or character in "-_ ." else "-"
+        for character in name
+    )
+    cleaned = " ".join(cleaned.split())
+    cleaned = cleaned.strip(" .-")
+    while "--" in cleaned:
+        cleaned = cleaned.replace("--", "-")
+    # Reserved device names on Windows, which cannot be used even with an
+    # extension. Prefixing is enough to sidestep them.
+    reserved = {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{index}" for index in range(1, 10)),
+        *(f"LPT{index}" for index in range(1, 10)),
+    }
+    if cleaned.upper() in reserved:
+        cleaned = f"event-{cleaned}"
+    return cleaned[:120] or "unnamed-event"
+
+
+@dataclass(frozen=True)
+class EventPaths:
+    """The three folders that make up one event's workspace."""
+
+    root: Path
+    invitation: Path
+    submissions: Path
+    standings: Path
+
+    def create(self) -> EventPaths:
+        """Create every folder, and return self for chaining."""
+        for path in (self.root, self.invitation, self.submissions, self.standings):
+            path.mkdir(parents=True, exist_ok=True)
+        return self
+
+    def exists(self) -> bool:
+        return self.root.is_dir()
+
+
+def event_paths(event_name: str) -> EventPaths:
+    """Return the workspace folders for ``event_name``.
+
+    Nothing is created; call :meth:`EventPaths.create` for that.
+    """
+    root = events_root() / safe_folder_name(event_name)
+    return EventPaths(
+        root=root,
+        invitation=root / "invitation",
+        submissions=root / "submissions",
+        standings=root / "standings",
+    )
 
 
 def default_journal_dirs() -> list[Path]:
@@ -142,9 +233,15 @@ def find_journal_dir() -> Path | None:
 __all__ = [
     "APP_DIRNAME",
     "APP_NAME",
+    "EVENTS_DIRNAME",
+    "EventPaths",
+    "app_root",
     "config_dir",
     "default_journal_dirs",
     "ensure_config_dir",
+    "event_paths",
+    "events_root",
     "find_journal_dir",
     "keys_dir",
+    "safe_folder_name",
 ]

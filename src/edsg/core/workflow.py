@@ -243,6 +243,34 @@ def close_event(
     )
 
 
+def preview_standings(
+    event: EventDefinition,
+    submissions_dir: Path,
+    invitation_fingerprint: str = "",
+) -> StandingsReport:
+    """Rank the submissions received so far without closing the event.
+
+    Identical scoring to :func:`close_event`, but nothing is mutated: the
+    event stays in whatever state it was in, no ``closed_at`` is stamped,
+    and no reports are written. This is what lets an organizer see who is
+    where, and spot a submission that will be rejected, while the event
+    is still running — and check the standings look right *before* taking
+    the one irreversible action in the application.
+    """
+    loaded = collect_submissions(submissions_dir)
+    if not loaded:
+        raise DocumentError(
+            f"No submission files were found in {submissions_dir}. "
+            f"Participant files end in {SUBMISSION_SUFFIX}."
+        )
+    return build_standings(
+        event,
+        loaded,
+        invitation_fingerprint=invitation_fingerprint,
+        generator_version=read_version(),
+    )
+
+
 def regenerate_standings(
     event: EventDefinition,
     submissions_dir: Path,
@@ -317,5 +345,6 @@ __all__ = [
     "issue_invitation",
     "load_invitation",
     "participate",
+    "preview_standings",
     "regenerate_standings",
 ]

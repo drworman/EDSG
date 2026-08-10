@@ -41,10 +41,13 @@ from edsg.core.models import (
     Submission,
 )
 from edsg.core.paths import find_journal_dir
+from edsg.core.settings import load_settings
 from edsg.core.workflow import Invitation, load_invitation, participate
+from edsg.gui.about import SupportStrip
+from edsg.gui.menus import build_menus
+from edsg.gui.preferences import edit_preferences
 from edsg.gui.theme import COLOURS, apply_theme
 from edsg.gui.widgets import (
-    AboutDialog,
     InfoPane,
     LogPane,
     PathPicker,
@@ -55,6 +58,7 @@ from edsg.gui.widgets import (
     separator,
     show_error,
     show_info,
+    wait_for_workers,
     window_title,
 )
 from edsg.version import read_version
@@ -74,6 +78,7 @@ class ParticipantWindow(QMainWindow):
         self.submission: Submission | None = None
         self.submission_path: Path | None = None
         self.busy = False
+        self.settings = load_settings()
 
         self.setWindowTitle(window_title(ROLE))
         self.resize(1020, 880)
@@ -88,10 +93,36 @@ class ParticipantWindow(QMainWindow):
     # -- construction ---------------------------------------------------
 
     def _build_menu(self) -> None:
-        help_menu = self.menuBar().addMenu("&Help")
-        about = QAction("&About", self)
-        about.triggered.connect(lambda: AboutDialog(self, ROLE).exec())
-        help_menu.addAction(about)
+        open_action = QAction("&Open invitation\u2026", self)
+        open_action.setShortcut("Ctrl+O")
+        open_action.triggered.connect(self._open_invitation)
+
+        save_action = QAction("&Save submission as\u2026", self)
+        save_action.setShortcut("Ctrl+S")
+        save_action.triggered.connect(self._save_as)
+
+        build_menus(
+            self,
+            ROLE,
+            file_actions=[open_action, save_action],
+            on_preferences=self._edit_preferences,
+        )
+
+    def _edit_preferences(self) -> None:
+        updated = edit_preferences(self, self.settings)
+        if updated is not None:
+            self.settings = updated
+            self.log.write("Preferences saved.", "good")
+        self.apply_palette(self.settings.appearance.palette())
+
+    def apply_palette(self, palette) -> None:
+        """Re-theme the running application."""
+        application = QApplication.instance()
+        if application is not None:
+            apply_theme(application, palette)
+        if self.invitation is not None:
+            self._show_event()
+        self._refresh()
 
     def _build(self) -> None:
         central = QWidget()
@@ -107,6 +138,7 @@ class ParticipantWindow(QMainWindow):
         title_box.addWidget(label(f"Participant build {read_version()}", "subtitle"))
         header.addLayout(title_box)
         header.addStretch(1)
+        header.addWidget(SupportStrip(compact=True), 0, Qt.AlignRight)
         layout.addLayout(header)
         layout.addWidget(separator())
 
@@ -503,6 +535,15 @@ class ParticipantWindow(QMainWindow):
         has_result = self.submission is not None and not self.busy
         self.save_button.setEnabled(has_result)
         self.reveal_button.setEnabled(has_result)
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        """Drain background work before the interpreter shuts down.
+
+        A pool thread still inside Python when the process exits is a
+        crash on close, and a scan can run for several seconds.
+        """
+        wait_for_workers()
+        super().closeEvent(event)
 
 
 def _format_units(value: float, measure: Measure) -> str:

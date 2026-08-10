@@ -50,18 +50,22 @@ from edsg.core.models import (
     EventWindow,
     TieBreak,
 )
-from edsg.core.paths import find_journal_dir
+from edsg.core.paths import EventPaths, event_paths, find_journal_dir
+from edsg.core.settings import load_settings
 from edsg.core.workflow import (
     close_event,
     detect_squadron_from_journals,
     issue_invitation,
     load_invitation,
+    preview_standings,
     regenerate_standings,
 )
+from edsg.gui.about import SupportStrip
 from edsg.gui.criterion_dialog import edit_criterion
+from edsg.gui.menus import build_menus
+from edsg.gui.preferences import edit_preferences
 from edsg.gui.theme import COLOURS, apply_theme
 from edsg.gui.widgets import (
-    AboutDialog,
     InfoPane,
     LogPane,
     PathPicker,
@@ -76,9 +80,11 @@ from edsg.gui.widgets import (
     show_info,
     show_warning,
     to_utc,
+    wait_for_workers,
     window_title,
 )
 from edsg.reports import write_all
+from edsg.reports.style import ReportStyle
 from edsg.version import read_version
 
 #: Extension for an organizer's editable working copy of an event.
@@ -103,6 +109,8 @@ class OrganizerWindow(QMainWindow):
         self.invitation_fingerprint = ""
         self.report_dir: Path | None = None
         self.busy = False
+        self.settings = load_settings()
+        self.workspace: EventPaths | None = None
 
         self.setWindowTitle(window_title(ROLE))
         self.resize(1120, 860)
@@ -116,26 +124,43 @@ class OrganizerWindow(QMainWindow):
     # -- construction ---------------------------------------------------
 
     def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("&File")
-        for text, slot, shortcut in (
-            ("&New event", self._new_event, "Ctrl+N"),
-            ("&Open event draft\u2026", self._open_draft, "Ctrl+O"),
-            ("&Save event draft\u2026", self._save_draft, "Ctrl+S"),
-        ):
-            action = QAction(text, self)
-            action.setShortcut(shortcut)
-            action.triggered.connect(slot)
-            file_menu.addAction(action)
-        file_menu.addSeparator()
-        quit_action = QAction("&Quit", self)
-        quit_action.setShortcut("Ctrl+Q")
-        quit_action.triggered.connect(self.close)
-        file_menu.addAction(quit_action)
+        new_action = QAction("&New event", self)
+        new_action.setShortcut("Ctrl+N")
+        new_action.triggered.connect(self._new_event)
 
-        help_menu = self.menuBar().addMenu("&Help")
-        about = QAction("&About", self)
-        about.triggered.connect(lambda: AboutDialog(self, ROLE).exec())
-        help_menu.addAction(about)
+        open_action = QAction("&Open event draft\u2026", self)
+        open_action.setShortcut("Ctrl+O")
+        open_action.triggered.connect(self._open_draft)
+
+        save_action = QAction("&Save event draft\u2026", self)
+        save_action.setShortcut("Ctrl+S")
+        save_action.triggered.connect(self._save_draft)
+
+        build_menus(
+            self,
+            ROLE,
+            file_actions=[new_action, open_action, save_action],
+            on_preferences=self._edit_preferences,
+        )
+
+    def _edit_preferences(self) -> None:
+        """Open preferences and adopt whatever comes back."""
+        updated = edit_preferences(self, self.settings)
+        if updated is not None:
+            self.settings = updated
+            self.log.write("Preferences saved.", "good")
+        self.apply_palette(self.settings.appearance.palette())
+
+    def apply_palette(self, palette) -> None:
+        """Re-theme the running application.
+
+        Called live from the preferences dialog as colours change, so the
+        organizer can see a theme before committing to it.
+        """
+        application = QApplication.instance()
+        if application is not None:
+            apply_theme(application, palette)
+        self._refresh()
 
     def _build(self) -> None:
         central = QWidget()
@@ -151,9 +176,13 @@ class OrganizerWindow(QMainWindow):
         title_box.addWidget(label(f"Organizer build {read_version()}", "subtitle"))
         header.addLayout(title_box)
         header.addStretch(1)
+        header_right = QVBoxLayout()
+        header_right.setSpacing(2)
+        header_right.addWidget(SupportStrip(compact=True), 0, Qt.AlignRight)
         self.state_label = label("", "hint")
         self.state_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        header.addWidget(self.state_label)
+        header_right.addWidget(self.state_label)
+        header.addLayout(header_right)
         layout.addLayout(header)
         layout.addWidget(separator())
 
@@ -409,6 +438,17 @@ class OrganizerWindow(QMainWindow):
 
         results = QGroupBox("Standings")
         results_layout = QVBoxLayout(results)
+
+        status_row = QHBoxLayout()
+        self.standings_status = label(
+            "Choose a submissions folder to preview the standings.", "hint"
+        )
+        self.refresh_preview_button = button("Refresh preview")
+        self.refresh_preview_button.clicked.connect(self._preview_standings)
+        status_row.addWidget(self.standings_status, 1)
+        status_row.addWidget(self.refresh_preview_button)
+        results_layout.addLayout(status_row)
+
         self.standings_tree = QTreeWidget()
         self.standings_tree.setColumnCount(4)
         self.standings_tree.setHeaderLabels(
@@ -698,7 +738,20 @@ class OrganizerWindow(QMainWindow):
             show_error(self, "Not ready to issue", problems[0], "\n".join(problems[1:]))
             return
 
-        suggested = f"{_safe_stem(self.event_def.name)}{INVITATION_SUFFIX}"
+        # Every event gets a workspace beside the binary:
+        #   Events/<Event Name>/{invitation,submissions,standings}
+        # The three folders are created together so the organizer never
+        # has to invent a place to put received submissions.
+        try:
+            workspace = event_paths(self.event_def.name).create()
+        except OSError as exc:
+            show_error(self, "Could not create the event folder", exc)
+            return
+
+        suggested = str(
+            workspace.invitation
+            / f"{_safe_stem(self.event_def.name)}{INVITATION_SUFFIX}"
+        )
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Save invitation",
@@ -718,15 +771,26 @@ class OrganizerWindow(QMainWindow):
         self.invitation_fingerprint = self.identity.fingerprint
         self.invitation_picker.set_path(written)
         self.issued_label.setText(f"Issued: {written.name}")
+        self.workspace = workspace
+
+        # Point the close tab at the folders just created, so collecting
+        # submissions and publishing need no further navigation.
+        self.submissions_picker.set_path(workspace.submissions)
+        self.report_dir = workspace.standings
+
         self.log.write(f"Invitation issued to {written}", "good")
+        self.log.write(f"Event workspace: {workspace.root}", "muted")
         self._refresh()
         show_info(
             self,
             "Invitation issued",
             f"Saved to {written}",
-            "Send this file to your participants, together with your "
-            "fingerprint so they can confirm it came from you:\n\n"
-            f"{self.identity.fingerprint}",
+            f"Send this file to your participants, together with your "
+            f"fingerprint so they can confirm it came from you:\n\n"
+            f"{self.identity.fingerprint}\n\n"
+            f"Put the submissions you receive into:\n"
+            f"{workspace.submissions}\n\n"
+            f"Standings will be written to:\n{workspace.standings}",
         )
 
     # -- closing ---------------------------------------------------------
@@ -737,6 +801,7 @@ class OrganizerWindow(QMainWindow):
         )
         if directory:
             self.submissions_picker.set_path(directory)
+            self._preview_standings()
 
     def _pick_invitation(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -765,6 +830,8 @@ class OrganizerWindow(QMainWindow):
             "good",
         )
         self._refresh()
+        if self.submissions_picker.path() is not None:
+            self._preview_standings()
 
     def _submissions_dir(self) -> Path | None:
         directory = self.submissions_picker.path()
@@ -809,6 +876,7 @@ class OrganizerWindow(QMainWindow):
         report_dir = Path(target)
         fingerprint = self.invitation_fingerprint
         event = self.event_def
+        style = ReportStyle.from_settings(self.settings)
 
         self._set_busy(True, "Reading submissions\u2026")
         self.log.write(f"Reading submissions from {directory}\u2026")
@@ -816,7 +884,7 @@ class OrganizerWindow(QMainWindow):
         def work(_report):
             runner = regenerate_standings if regenerate else close_event
             report = runner(event, directory, fingerprint)
-            written = write_all(report, report_dir, _safe_stem(event.name))
+            written = write_all(report, report_dir, _safe_stem(event.name), style)
             return report, written
 
         def finished(payload) -> None:
@@ -824,21 +892,7 @@ class OrganizerWindow(QMainWindow):
             report, written = payload
             self.report_dir = report_dir
 
-            self.standings_tree.clear()
-            for standing in report.standings:
-                item = QTreeWidgetItem(
-                    [
-                        f"{standing.rank}{' =' if standing.tied else ''}",
-                        f"CMDR {standing.commander_name}",
-                        standing.commander_fid,
-                        f"{standing.total_points:,.2f}",
-                    ]
-                )
-                item.setTextAlignment(0, Qt.AlignCenter)
-                item.setTextAlignment(3, Qt.AlignRight | Qt.AlignVCenter)
-                if standing.rank == 1:
-                    item.setForeground(1, QColor(COLOURS["accent"]))
-                self.standings_tree.addTopLevelItem(item)
+            self._populate_standings(report, preview=False)
 
             verb = "Regenerated" if regenerate else "Closed"
             self.log.write(
@@ -863,6 +917,88 @@ class OrganizerWindow(QMainWindow):
             self._set_busy(False)
             self.log.write(f"Close failed: {exc}", "bad")
             show_error(self, "Could not close the event", exc)
+
+        run_in_background(work, finished, failed)
+
+    def _populate_standings(self, report, preview: bool) -> None:
+        """Fill the standings table from a report."""
+        self.standings_tree.clear()
+        for standing in report.standings:
+            item = QTreeWidgetItem(
+                [
+                    f"{standing.rank}{' =' if standing.tied else ''}",
+                    f"CMDR {standing.commander_name}",
+                    standing.commander_fid,
+                    f"{standing.total_points:,.2f}",
+                ]
+            )
+            item.setTextAlignment(0, Qt.AlignCenter)
+            item.setTextAlignment(3, Qt.AlignRight | Qt.AlignVCenter)
+            if standing.rank == 1:
+                item.setForeground(1, QColor(COLOURS["accent"]))
+            self.standings_tree.addTopLevelItem(item)
+
+        ranked = report.participant_count
+        rejected = len(report.rejected)
+        if preview:
+            text = (
+                f"Preview \u2014 {ranked} ranked, {rejected} would be "
+                f"rejected. The event is not closed and nothing has been "
+                f"written."
+            )
+            role = "warn" if rejected else "hint"
+        else:
+            text = f"Final \u2014 {ranked} ranked, {rejected} rejected."
+            role = "good"
+        self.standings_status.setText(text)
+        self.standings_status.setProperty("role", role)
+        self.standings_status.style().unpolish(self.standings_status)
+        self.standings_status.style().polish(self.standings_status)
+
+    def _preview_standings(self) -> None:
+        """Score the submissions folder without closing anything.
+
+        Runs on every folder selection so an organizer can see the
+        standings, and any submission that will be rejected, before
+        committing to the one irreversible action in the application.
+        """
+        directory = self.submissions_picker.path()
+        if directory is None or not directory.is_dir() or self.busy:
+            return
+
+        self._collect()
+        if not self.event_def.criteria:
+            self.standings_status.setText(
+                "Load the invitation for this event to preview the standings."
+            )
+            return
+
+        event = self.event_def
+        fingerprint = self.invitation_fingerprint
+        self.refresh_preview_button.setEnabled(False)
+        self.standings_status.setText("Reading submissions\u2026")
+
+        def work(_report):
+            return preview_standings(event, directory, fingerprint)
+
+        def finished(report) -> None:
+            self.refresh_preview_button.setEnabled(True)
+            self._populate_standings(report, preview=True)
+            self.log.write(
+                f"Preview: {report.participant_count} ranked, "
+                f"{len(report.rejected)} would be rejected.",
+                "accent",
+            )
+            for item in report.rejected:
+                self.log.write(
+                    f"Would reject {item.path.name}: {item.rejection}", "warn"
+                )
+
+        def failed(exc: BaseException) -> None:
+            self.refresh_preview_button.setEnabled(True)
+            self.standings_tree.clear()
+            self.standings_status.setText(str(exc))
+            self.log.write(f"Preview failed: {exc}", "warn")
 
         run_in_background(work, finished, failed)
 
@@ -934,6 +1070,15 @@ class OrganizerWindow(QMainWindow):
         )
         self.tabs.setEnabled(not busy)
         self._refresh()
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        """Drain background work before the interpreter shuts down.
+
+        A pool thread still inside Python when the process exits is a
+        crash on close, and a scan can run for several seconds.
+        """
+        wait_for_workers()
+        super().closeEvent(event)
 
 
 def _safe_stem(name: str) -> str:

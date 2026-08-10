@@ -34,6 +34,24 @@ the encoding signatures are computed over.
 - GUI smoke tests covering every metric in the criterion dialog.
 
 ### Fixed
+- **Menus were destroyed shortly after being built.** Qt menus created by
+  `bar.addMenu(title)` are owned by Python, and PySide6 returns a fresh
+  wrapper on every `QAction.menu()` call, so releasing any one of them
+  destroyed the menu the others pointed at. Menus are now parented to the
+  window and held by reference. They rendered at startup only because
+  nothing had triggered a collection yet.
+- **Report table headers were close to unreadable.** Header text was the
+  muted body tone on a dark fill. Header colours are now derived from the
+  palette and checked for contrast; every built-in theme clears 9.7:1,
+  against a 4.5:1 requirement. The PDF prints dark-on-tint rather than
+  white-on-near-black.
+- **The organizer could segfault when closing an event.** Background tasks
+  were left for Qt's thread pool to destroy, which could tear down the
+  signals object while a queued result was still being delivered to the UI
+  thread — a crash inside the event loop with no Python traceback. Workers
+  now disable `autoDelete`, are held by reference until they report, and are
+  drained when a window closes. Reproduced at roughly one run in six before
+  the fix, zero in twenty afterwards.
 - **CI never installed the package, so no test ever ran.** The test job
   installed the dependencies but not `edsg` itself, and pytest exited 4 on a
   `ModuleNotFoundError` in `conftest.py` before collecting anything. All nine

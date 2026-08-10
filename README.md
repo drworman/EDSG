@@ -178,6 +178,7 @@ that an organizer needs to notice something implausible.
 | [Architecture](docs/ARCHITECTURE.md) | How the code is laid out |
 | [Building](docs/BUILDING.md) | Building binaries yourself |
 | [Licensing](docs/LICENSING.md) | MIT, and the Qt LGPL obligations |
+| [Themes and branding](docs/THEMES.md) | Palettes, custom colours, squadron identity on reports |
 | [Contributing](CONTRIBUTING.md) | Conventional Commits, versioning, tests |
 
 ## Command line
