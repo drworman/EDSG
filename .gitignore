@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+dist-onedir/
+build-onedir/
+*.spec.bak
+
+# Environments
+.venv/
+venv/
+env/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# EDSG working files. Signing keys must never be committed.
+*.edsgi
+*.edsgs
+*.edsgevent
+keys/
+*.key
+*.pem
+*.pfx
+*.p12
+
+# OS
+.DS_Store
+Thumbs.db

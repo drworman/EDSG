@@ -1,0 +1,7 @@
+# Runtime dependencies for ED: Squad Goals.
+#
+# Licences are noted because EDSG ships as a redistributed binary and the
+# obligations differ per package. See docs/LICENSING.md.
+PySide6>=6.6,<7          # Qt for Python — LGPL v3 (dynamically linked)
+cryptography>=42.0       # Ed25519 signing — Apache-2.0 OR BSD-3-Clause
+reportlab>=4.0,<5        # PDF reports — BSD-3-Clause

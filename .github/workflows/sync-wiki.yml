@@ -1,0 +1,94 @@
+name: Sync Wiki
+
+# Publishes the repository's documentation to the GitHub wiki.
+#
+# The wiki is a separate git repository, so nothing here touches the main
+# one. scripts/sync_wiki.sh does the copying, renaming and link rewriting;
+# this workflow only supplies the two checkouts and pushes the result.
+#
+# Before the first run the wiki must exist: open the repository's Wiki tab
+# and create any page. GitHub does not create the wiki repository until a
+# page has been saved, and the checkout below fails until it does.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - 'CONTRIBUTING.md'
+      - 'THIRD-PARTY-NOTICES.md'
+      - 'docs/**'
+      - 'scripts/sync_wiki.sh'
+      - '.github/workflows/sync-wiki.yml'
+
+  # Allow manual trigger from the Actions tab
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required to push to the wiki
+
+concurrency:
+  group: sync-wiki
+  cancel-in-progress: false
+
+jobs:
+  sync-wiki:
+    name: Publish docs to the wiki
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+        with:
+          path: repo
+
+      - name: Checkout wiki repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run sync script
+        env:
+          REPO_DIR: ${{ github.workspace }}/repo
+          WIKI_DIR: ${{ github.workspace }}/wiki
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash repo/scripts/sync_wiki.sh
+
+      # Catches a rename or a moved doc leaving a stale page behind, and
+      # a rewrite rule that silently stopped matching. Cheap, and the
+      # alternative is noticing months later.
+      - name: Report broken wiki links
+        working-directory: wiki
+        run: |
+          set -euo pipefail
+          pages="$(ls ./*.md | xargs -n1 basename | sed 's/\.md$//')"
+          broken=0
+          for file in ./*.md; do
+            while read -r link; do
+              case "$link" in http*|'#'*|'') continue ;; esac
+              target="${link%%#*}"
+              if ! echo "$pages" | grep -qx "$target"; then
+                echo "::warning file=${file}::link to '${link}' has no wiki page"
+                broken=$((broken + 1))
+              fi
+            done < <(grep -oE '\]\(([^)]+)\)' "$file" |
+                     sed -E 's/^\]\(//; s/\)$//')
+          done
+          echo "Broken relative links: ${broken}"
+
+      - name: Commit and push wiki changes
+        working-directory: wiki
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No wiki changes to commit."
+          else
+            git commit -m "docs: sync wiki from ${GITHUB_SHA::7} [skip ci]"
+            git push
+          fi

@@ -1,0 +1,114 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edsg"
+description = "ED: Squad Goals — community event scoring for Elite Dangerous"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "ED: Squad Goals contributors" }]
+keywords = ["elite-dangerous", "gaming", "events", "leaderboard"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment",
+]
+dynamic = ["version", "dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/drworman/EDSG"
+Issues = "https://github.com/drworman/EDSG/issues"
+Changelog = "https://github.com/drworman/EDSG/blob/main/CHANGELOG.md"
+
+[project.scripts]
+edsg = "edsg.cli:main"
+edsg-organizer = "edsg.organizer_main:main"
+edsg-participant = "edsg.participant_main:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { file = "version" }
+dependencies = { file = "requirements.txt" }
+
+[tool.setuptools.package-data]
+edsg = ["version"]
+
+# --------------------------------------------------------------------- #
+# Tooling
+# --------------------------------------------------------------------- #
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# PEP 8 is enforced through pycodestyle (E, W) plus pyflakes (F). The rest
+# catch the mistakes that review keeps finding by hand.
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import ordering
+    "N",    # PEP 8 naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "PTH",  # prefer pathlib
+    "RUF",
+]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B008",    # Qt idioms construct defaults in call signatures
+    "RUF012",  # Qt class attributes are not ClassVar-annotated
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N802"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: tests that read a full journal corpus",
+    "gui: tests that need a Qt display (offscreen is fine)",
+]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["edsg"]
+mypy_path = "src"
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["reportlab.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["src/edsg"]
+omit = ["*/gui/*"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
