@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/);
 see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Versions are `YYYYMMDD` datestamps**, matching ED Linux Dash. The version
+**Versions are `YYYYMMDD` datestamps**. The version
 lives in the plain-text `version` file at the repository root, and a release
 tag must match it exactly or the release workflow fails.
 
@@ -16,7 +16,7 @@ govern it: `SCHEMA_VERSION` in `core/models.py` for the structure of
 invitations and submissions, and `CANONICAL_FORM` in `core/canonical.py` for
 the encoding signatures are computed over.
 
-## [Unreleased]
+## [20260811]
 
 ### Added
 - Wiki publishing: `.github/workflows/sync-wiki.yml` and
