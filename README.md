@@ -11,7 +11,6 @@
 [![Qt for Python](https://img.shields.io/badge/GUI-PySide6-41CD52?style=flat-square)](https://www.qt.io/qt-for-python)
 [![Signed](https://img.shields.io/badge/Documents-Ed25519%20Signed-9b6cd8?style=flat-square)]()
 
-[![CI](https://img.shields.io/github/actions/workflow/status/drworman/EDSG/ci.yml?style=flat-square&label=CI)](https://github.com/drworman/EDSG/actions/workflows/ci.yml)
 [![GitHub release](https://img.shields.io/github/v/release/drworman/EDSG?style=flat-square)](https://github.com/drworman/EDSG/releases)
 [![GitHub stars](https://img.shields.io/github/stars/drworman/EDSG?style=flat-square)](https://github.com/drworman/EDSG/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/drworman/EDSG?style=flat-square)](https://github.com/drworman/EDSG/network/members)
