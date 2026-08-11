@@ -194,11 +194,46 @@ EDSG-Organizer   --cli close event.json --submissions ./subs --out ./reports
 
 ## Licence
 
-EDSG is [MIT licensed](LICENSE). It bundles Qt for Python under the LGPL v3,
-along with ReportLab and cryptography — see
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) and
-[docs/LICENSING.md](docs/LICENSING.md).
+ED: Squad Goals is released under the **MIT licence** — see [LICENSE](LICENSE)
+for the full text.
 
-Elite Dangerous is a trademark of Frontier Developments plc. EDSG is an
-unofficial community tool, not affiliated with, endorsed by, or supported by
-Frontier Developments.
+Copyright © 2026 David R. Worman.
+
+The `LICENSE` file contains the licence text and nothing else, so GitHub can
+identify it automatically. The attribution and disclaimers that belong
+alongside it are below rather than in that file.
+
+### Bundled components
+
+The distributed binaries include third-party code under its own terms:
+
+| Component | Licence |
+|---|---|
+| Qt for Python (PySide6) and Qt | LGPL v3 |
+| cryptography | Apache 2.0 |
+| ReportLab | BSD 3-Clause |
+| Pillow (organizer build only) | MIT-CMU |
+
+Qt is dynamically linked and never statically linked, and the licence texts
+ship inside every binary. [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)
+gives the full notices, and [docs/LICENSING.md](docs/LICENSING.md) explains
+how the LGPL obligations are met and what they mean if you fork the project.
+
+### Trademarks and affiliation
+
+Elite Dangerous is a trademark of Frontier Developments plc.
+
+**ED: Squad Goals is an unofficial community tool. It is not affiliated with,
+endorsed by, or supported by Frontier Developments plc.**
+
+EDSG reads the journal files the game writes to the local filesystem, in the
+format Frontier documents for exactly this purpose. It does not modify the
+game, inject code, read process memory, or interact with Frontier's servers.
+
+### No warranty
+
+EDSG is provided "as is", without warranty of any kind, as set out in the
+MIT licence. Signatures on invitations and submissions protect those files in
+transit; they cannot attest that a participant's journal files were
+themselves unmodified. See [docs/SECURITY.md](docs/SECURITY.md) for what the
+signing does and does not prove.
