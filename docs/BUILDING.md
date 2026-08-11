@@ -85,6 +85,23 @@ drift apart. Points worth knowing before changing it:
   up on Windows. The `--cli` interface still works and still prints to stdout
   when run from a terminal.
 
+## Before you release
+
+There is no CI workflow, so nothing checks a commit before it is tagged. Run
+the full set locally first:
+
+```bash
+ruff check src tests scripts
+ruff format --check src tests scripts
+mypy src/edsg/core src/edsg/reports src/edsg/cli.py \
+     src/edsg/version.py src/edsg/docs_gen.py src/edsg/win_console.py
+QT_QPA_PLATFORM=offscreen pytest -q
+```
+
+The release workflow does smoke-test each built binary — it runs
+`--cli version` on all three platforms and fails on a mismatch — but that
+catches a broken build, not a broken change.
+
 ## Releasing
 
 Versions are `YYYYMMDD` datestamps, so a release is identified by the day it

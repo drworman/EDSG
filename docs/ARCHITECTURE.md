@@ -6,6 +6,7 @@
 src/edsg/
 ├── version.py            Reads the root `version` file; the only source of truth
 ├── cli.py                Headless interface, reached via `--cli` in both binaries
+├── win_console.py        Reattaches stdout for `--cli` on windowed Windows builds
 ├── docs_gen.py           Generates docs/CRITERIA.md from the criteria tables
 ├── organizer_main.py     Entry point for the organizer binary
 ├── participant_main.py   Entry point for the participant binary
@@ -19,20 +20,26 @@ src/edsg/
 │   ├── location.py       Tracks position; resolves MarketID to a station
 │   ├── metrics.py        Single-pass scoring engine
 │   ├── models.py         Event, invitation and submission documents
-│   ├── paths.py          Platform config dirs and journal auto-discovery
+│   ├── palettes.py       Theme colours, with derived, contrast-checked tones
+│   ├── paths.py          Config dirs, journal discovery, the event workspace
+│   ├── settings.py       Appearance and branding, shared by both binaries
 │   ├── squadron.py       Membership reconciliation from journal evidence
 │   ├── standings.py      Verification, ranking, tie-breaks
 │   └── workflow.py       issue → participate → close
 │
 ├── reports/              Output writers. No Qt.
 │   ├── common.py         Shared formatting so all four formats agree
+│   ├── style.py          Theme and branding passed to every writer
 │   ├── json_report.py    Complete machine-readable record
 │   ├── markdown_report.py
 │   ├── html_report.py    Self-contained, no external assets
 │   └── pdf_report.py     ReportLab; organizer build only
 │
 └── gui/                  PySide6. Imports core; core never imports this.
-    ├── theme.py          Palette and stylesheet
+    ├── about.py          About dialog and the funding links
+    ├── menus.py          The menu bar shared by both windows
+    ├── preferences.py    Theme, custom colours and squadron branding
+    ├── theme.py          Stylesheet, driven by core.palettes
     ├── widgets.py        Shared widgets and the background worker
     ├── criterion_dialog.py
     ├── organizer.py
@@ -118,12 +125,48 @@ Unknown event types are simply carried through — Frontier adds them with every
 update, and the catch-all `event_count` metric can score them by name without a
 new EDSG release.
 
+## Qt object ownership
+
+Two crashes in this codebase had the same root cause, and both are worth
+knowing about before adding Qt objects.
+
+**Background workers.** A `QRunnable` handed to `QThreadPool` is destroyed in
+C++ the moment `run` returns, which could tear down the signals object while
+a queued result was still in flight — a segfault inside the event loop with
+no Python traceback. Workers now set `autoDelete(False)`, are held in
+`_ACTIVE_WORKERS` until they report, and are drained on window close.
+
+**Menus.** A menu created by `bar.addMenu(title)` is owned by Python, and
+PySide6 returns a fresh wrapper on every `QAction.menu()` call, so releasing
+any one of them destroys the menu the others still point at. Menus are built
+with the window as parent *and* kept in a list on the window; both halves are
+needed.
+
+The general rule: if Qt hands back an object whose owner is ambiguous, give
+it a parent and keep a reference.
+
 ## Threading
 
 Journal scanning takes seconds, so it runs on a `QThreadPool` worker. Qt
 widgets may only be touched from the UI thread, so the worker never receives
 one; it gets a `report` callable whose payload arrives back as a signal on the
 UI thread. See `gui/widgets.py`.
+
+## Settings and theming
+
+`core/palettes.py` holds the colour definitions and `core/settings.py` reads
+and writes the one settings file both binaries share. Neither imports Qt, so
+the report writers and the documentation generator can use them in a build
+with no GUI toolkit at all.
+
+Three colours — the table header background, its text, and the alternating
+row tint — are *derived* from the palette rather than chosen, and the header
+text is picked for contrast against its own background. That is deliberate: a
+custom accent cannot produce an unreadable table.
+
+`gui/theme.py` expands a palette into the stylesheet and mutates `COLOURS` in
+place, so modules that imported that dict at import time follow a theme
+change without needing a refresh hook.
 
 ## Error handling
 

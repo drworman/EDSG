@@ -100,6 +100,15 @@ EDSG-Participant --cli inspect F10467336.edsgs
 Bear in mind your organizer will see your commander name and Frontier ID. That
 is unavoidable in a scored competition, but it is worth knowing.
 
+## Making it readable
+
+**Options → Preferences** offers seven themes and per-colour overrides, so
+you can match EDSG to the rest of your setup or pick something easier on the
+eyes. The setting is shared with the organizer build if you run both.
+
+The **Help** menu links to the documentation, the project on GitHub and a
+place to report problems.
+
 ## Privacy and safety
 
 EDSG reads only `Journal.*.log` files, on your machine. It does not modify the

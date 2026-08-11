@@ -109,13 +109,21 @@ working with a build cut today unless one of these deliberately changed.
 
 ## Code style
 
-PEP 8, enforced by `ruff`:
+PEP 8, enforced by `ruff`. There is no CI workflow, so run these before you
+push — the release workflow builds binaries but does not lint or test:
 
 ```bash
-ruff check src tests
-ruff format src tests
-mypy
+ruff check src tests scripts
+ruff format src tests scripts
+mypy src/edsg/core src/edsg/reports src/edsg/cli.py \
+     src/edsg/version.py src/edsg/docs_gen.py src/edsg/win_console.py
+QT_QPA_PLATFORM=offscreen pytest -q
 ```
+
+mypy is pointed at the Qt-free layer on purpose. PySide6's stubs do not
+describe the enum access the interface uses (`Qt.AlignCenter`, `Qt.UserRole`
+and friends), so running it over `gui/` reports dozens of errors that are all
+false.
 
 Beyond what the linter checks:
 
@@ -130,7 +138,13 @@ Beyond what the linter checks:
   person who has to act on it, and say what to do next.
 - **Keep the core free of Qt.** Nothing under `edsg/core/` or `edsg/reports/`
   may import PySide6. That boundary is what lets the CLI, the tests and both
-  GUIs drive identical logic.
+  GUIs drive identical logic — and it is why the report writers can use the
+  theme palettes without a GUI toolkit present.
+- **Give Qt objects an owner.** Anything Qt hands back whose ownership is
+  ambiguous — a `QRunnable` on the thread pool, a menu from `addMenu` — needs
+  a parent *and* a Python reference. Both crashes fixed in this project came
+  from getting that wrong; see the ownership section in
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Tests
 
@@ -145,6 +159,10 @@ Areas where a test is not optional:
 - Any new metric. Cover the filter matching both internal and localised names,
   and the boundary of the event window.
 - Squadron membership logic.
+- Any new theme colour that is derived rather than chosen — assert its
+  contrast, as `tests/test_settings.py` does for the table headers.
+- Anything that reads or writes the settings file. A corrupt settings file
+  must fall back to defaults, never stop the application starting.
 
 ## Adding a metric
 

@@ -103,12 +103,15 @@ Prefer to build it yourself? See [docs/BUILDING.md](docs/BUILDING.md).
 2. **Criteria** — add one criterion per thing you want to measure. Each pairs a
    metric with optional filters and a points value. See
    [docs/CRITERIA.md](docs/CRITERIA.md).
-3. **Issue invitation** — EDSG signs the event and writes a `.edsgi` file.
+3. **Issue invitation** — EDSG signs the event, creates
+   `Events/<Event Name>/` beside the binary, and writes the `.edsgi` there.
    Send it to your participants along with your **signing fingerprint**, shown
    on that tab, so they can confirm it came from you.
-4. **Close & publish** — collect the `.edsgs` files into one folder, then close
-   the event. Closing is permanent. Reports can be regenerated at any time as
-   long as you keep that folder.
+4. **Close & publish** — drop the `.edsgs` files you receive into the
+   `submissions` folder. The standings preview updates as soon as you point
+   EDSG at the folder, so you can check the results and spot a rejected
+   submission *before* closing. Closing is permanent; reports can be
+   regenerated at any time as long as you keep that folder.
 
 ### Participants
 
@@ -119,6 +122,29 @@ Prefer to build it yourself? See [docs/BUILDING.md](docs/BUILDING.md).
 3. Click **Scan my journals**.
 4. Send the resulting `.edsgs` file — named for your Frontier ID — to your
    organizer.
+
+### Where files are saved
+
+The binary treats its own folder as the workspace root, so an executable on a
+memory stick carries its events with it:
+
+```
+EDSG-Organizer(.exe)
+Events/
+└── Summer Mining Drive/
+    ├── invitation/     the .edsgi you send out
+    ├── submissions/    the .edsgs files you receive
+    └── standings/      JSON, Markdown, HTML and PDF reports
+```
+
+### Make it yours
+
+**Options → Preferences** sets the theme and your squadron identity. Seven
+palettes, matching ED Linux Dash, plus per-colour overrides. Your squadron
+name, tag, contact details and logo are printed at the top of every report.
+
+Both binaries share one settings file, so you configure it once.
+See [docs/THEMES.md](docs/THEMES.md).
 
 ## What can be scored
 

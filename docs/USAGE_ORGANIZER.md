@@ -80,7 +80,27 @@ one per ore, say — then edit each copy.
 ## 3 · Issue the invitation
 
 The *Readiness* panel lists anything blocking you. When it is clear, click
-**Issue invitation** and choose where to save the `.edsgi` file.
+**Issue invitation**.
+
+EDSG creates a workspace for the event beside the binary and offers to save
+the invitation inside it:
+
+```
+EDSG-Organizer(.exe)
+Events/
+└── Summer Mining Drive/
+    ├── invitation/
+    ├── submissions/
+    └── standings/
+```
+
+All three folders are created together, and the *Close & publish* tab is
+pointed at them, so there is nowhere left to guess. You can still save the
+invitation elsewhere if you prefer.
+
+Event names are sanitised for the filesystem — `Test Event #1` becomes
+`Test Event -1` — so a name that reads well in a report cannot produce a
+folder that will not create. `EDSG_HOME` overrides the workspace root.
 
 Send participants:
 
@@ -102,7 +122,18 @@ are not signed and are for your own use.
 ## 4 · Collect submissions
 
 Participants send back `.edsgs` files, each named for their Frontier ID.
-Put them all in one folder.
+Put them in the event's `submissions` folder.
+
+**Check the preview as they arrive.** Selecting the submissions folder scores
+every file immediately and fills the standings table, without closing the
+event or writing anything. The line above the table reads *"Preview — 2
+ranked, 0 would be rejected"*, and anything that would be rejected is listed
+in the log with its reason.
+
+This is the point at which a bad submission is worth finding. Closing is the
+one irreversible action in the application, and a participant can still
+rescan and resend beforehand. **Refresh preview** re-runs it after new files
+land.
 
 Treat that folder as personal data: it contains commander names, Frontier IDs
 and play statistics. Do not publish the raw files.
@@ -132,6 +163,15 @@ Choose an output folder and EDSG writes four reports:
 **Keep the submissions folder.** *Regenerate reports* rebuilds all four at any
 time, producing identical output. Without the submissions there is nothing to
 regenerate from.
+
+## Branding your reports
+
+**Options → Preferences → Squadron branding** puts your squadron name, tag,
+contact details and logo at the top left of every report. **Appearance** sets
+the theme, which applies to both the interface and the generated reports.
+
+Both EDSG binaries share one settings file, so this is configured once per
+machine rather than once per build. See [THEMES.md](THEMES.md).
 
 ## Reading the results
 

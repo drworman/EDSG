@@ -19,6 +19,28 @@ the encoding signatures are computed over.
 ## [20260811]
 
 ### Added
+- **Themes, shared between both binaries and the reports.** Seven palettes
+  ported from ED Linux Dash, plus per-colour overrides for a squadron's own
+  scheme. Preferences live in one file in the user configuration directory,
+  so the organizer and participant builds are configured once. See
+  [docs/THEMES.md](docs/THEMES.md).
+- **Squadron branding on every report.** Name, tag, up to four contact
+  details and a logo, printed top-left. The logo is embedded in the HTML as
+  a data URI so the report stays self-contained when it is shared.
+- **An event workspace beside the binary.** Issuing an invitation creates
+  `Events/<Event Name>/{invitation,submissions,standings}` and points the
+  close tab at the new folders, so there is nowhere to guess. Event names are
+  sanitised for the filesystem, including Windows reserved device names.
+- **Full menu bars on both builds.** File, Options and Help, with
+  preferences, the workspace and settings folders, documentation, the
+  repository, issues, releases and an About dialog. A quiet "Support EDSG
+  development" strip in the header carries the Patreon, Ko-fi and PayPal
+  links from `.github/FUNDING.yml`, and a test fails if the two drift apart.
+- **Standings preview.** Choosing the submissions folder scores every file
+  and fills the standings table immediately, without closing the event or
+  writing anything. Submissions that would be rejected are listed with their
+  reason, so a problem is found while it can still be fixed rather than
+  after the one irreversible action in the application.
 - Wiki publishing: `.github/workflows/sync-wiki.yml` and
   `scripts/sync_wiki.sh` mirror the README and `docs/` to the GitHub wiki,
   rewriting internal links, pointing images at raw.githubusercontent, and
@@ -81,15 +103,23 @@ the encoding signatures are computed over.
 - Versions are `YYYYMMDD` datestamps; tags are the bare datestamp with no
   `v` prefix, and the release workflow triggers on any tag starting with a
   digit.
-- CI now runs on the `dev` branch and on pull requests into `main`, rather
-  than on every push. Documentation, artwork and repository metadata are
-  excluded from triggering it, so editing a README or `FUNDING.yml` no
-  longer starts a build matrix.
-- The test matrix is five jobs rather than nine: Python 3.12 (the release
-  interpreter) on all three platforms, plus 3.11 and 3.13 on Linux.
-- mypy is scoped to the Qt-free layer and now blocks. PySide6's stubs do not
-  describe the enum access the GUI uses, which produced 63 false errors out
-  of 64 and made the step meaningless as `continue-on-error`.
+- **`LICENSE` now contains the MIT text and nothing else**, so GitHub
+  identifies the licence and shows it on the repository page. The
+  attribution, trademark notice and warranty disclaimer that used to trail
+  it have moved to the licence section of the README. Measured against the
+  SPDX template, the file went from 90.6% to 100% similarity — GitHub's
+  detector needs about 98%.
+- mypy is scoped to the Qt-free layer rather than run across the GUI.
+  PySide6's stubs do not describe the enum access the interface uses, which
+  produced 63 false errors out of 64.
+
+### Removed
+- **The continuous integration workflow.** It was reporting more noise than
+  signal, and the checks it ran — `ruff check`, `ruff format --check`,
+  `mypy` and `pytest` — are the same ones described in
+  [CONTRIBUTING.md](CONTRIBUTING.md) for running locally before a push. The
+  release workflow is unaffected and still builds, signs and smoke-tests
+  every binary on all three platforms.
 
 ### Known limitations
 - **Operations has no dedicated metric yet.** Operations launched on
@@ -164,5 +194,6 @@ Document schema `SCHEMA_VERSION` 1, signing encoding
   schema and covered by synthetic tests, having not appeared in the journal
   corpus used during development.
 
-[Unreleased]: https://github.com/drworman/EDSG/compare/20260810...HEAD
+[Unreleased]: https://github.com/drworman/EDSG/compare/20260811...HEAD
+[20260811]: https://github.com/drworman/EDSG/compare/20260810...20260811
 [20260810]: https://github.com/drworman/EDSG/releases/tag/20260810
