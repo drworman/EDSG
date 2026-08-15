@@ -14,7 +14,15 @@ from edsg.core.palettes import (
     get_palette,
     is_colour,
 )
-from edsg.core.paths import event_paths, safe_folder_name
+from edsg.core.paths import (
+    ROLE_ORGANIZER,
+    ROLE_PARTICIPANT,
+    config_dir,
+    config_root,
+    event_paths,
+    safe_folder_name,
+    set_role,
+)
 from edsg.core.settings import (
     Appearance,
     Branding,
@@ -89,12 +97,14 @@ def test_settings_round_trip(tmp_path, monkeypatch):
 def test_corrupt_settings_fall_back_to_defaults(tmp_path, monkeypatch):
     """A bad settings file must never stop the application starting."""
     monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path))
+    settings_path().parent.mkdir(parents=True, exist_ok=True)
     settings_path().write_text("{ this is not json", encoding="utf-8")
     assert load_settings().appearance.theme == "default"
 
 
 def test_settings_reject_invalid_custom_colours(tmp_path, monkeypatch):
     monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path))
+    settings_path().parent.mkdir(parents=True, exist_ok=True)
     settings_path().write_text(
         json.dumps(
             {"appearance": {"theme": "green", "custom_colours": {"accent": "red"}}}
@@ -106,12 +116,103 @@ def test_settings_reject_invalid_custom_colours(tmp_path, monkeypatch):
     assert loaded.appearance.custom_colours == {}
 
 
-def test_both_binaries_share_one_settings_file(tmp_path, monkeypatch):
-    """The organizer and participant must not need separate configuration."""
+def test_each_binary_has_its_own_settings_directory(tmp_path, monkeypatch):
+    """Each role keeps its configuration separate.
+
+    The organizer holds a signing identity participants have been told to
+    trust, and squadron details; the participant holds neither. Sharing a
+    folder means copying one role's configuration drags the other's
+    identity along with it.
+    """
     monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path))
-    save_settings(Settings(appearance=Appearance(theme="purple")))
-    assert settings_path().parent == tmp_path
-    assert load_settings().appearance.theme == "purple"
+
+    save_settings(Settings(appearance=Appearance(theme="purple")), role=ROLE_ORGANIZER)
+    save_settings(Settings(appearance=Appearance(theme="green")), role=ROLE_PARTICIPANT)
+
+    assert settings_path(ROLE_ORGANIZER) == tmp_path / "Organizer" / "settings.json"
+    assert settings_path(ROLE_PARTICIPANT) == tmp_path / "Participant" / "settings.json"
+    assert load_settings(ROLE_ORGANIZER).appearance.theme == "purple"
+    assert load_settings(ROLE_PARTICIPANT).appearance.theme == "green"
+
+
+def test_signing_keys_are_kept_per_role(tmp_path, monkeypatch):
+    """An organizer's key must never appear in a participant install."""
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path))
+    from edsg.core.crypto import load_identity, load_or_create_identity
+
+    set_role(ROLE_ORGANIZER)
+    organizer = load_or_create_identity("organizer", "Organizer")
+    set_role(ROLE_PARTICIPANT)
+    participant = load_or_create_identity("participant", "Participant")
+
+    assert organizer.fingerprint != participant.fingerprint
+    assert (tmp_path / "Organizer" / "keys" / "organizer.key").is_file()
+    assert (tmp_path / "Participant" / "keys" / "participant.key").is_file()
+    assert not (tmp_path / "Participant" / "keys" / "organizer.key").exists()
+
+    # The participant role must not see the organizer's identity at all.
+    assert load_identity("organizer") is None
+
+
+def test_role_directories_use_the_expected_names(tmp_path, monkeypatch):
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path))
+    set_role(ROLE_ORGANIZER)
+    assert config_dir() == tmp_path / "Organizer"
+    set_role(ROLE_PARTICIPANT)
+    assert config_dir() == tmp_path / "Participant"
+    assert config_root() == tmp_path
+
+
+def test_an_unknown_role_is_refused():
+    with pytest.raises(ValueError, match="Unknown role"):
+        set_role("Referee")
+
+
+# -- remembered squadron ----------------------------------------------
+
+
+def test_organizer_remembers_its_squadron(tmp_path, monkeypatch):
+    """An organizer runs event after event for the same squadron."""
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path))
+    from edsg.core.squadron import SquadronRef
+
+    settings = Settings()
+    assert settings.organizer.squadron_ref() is None
+
+    settings.organizer.remember_squadron(
+        SquadronRef(squadron_id=110393, name="MINING AND LOGISTICS LTD")
+    )
+    settings.organizer.organizer_name = "CMDR HUGH JASSOLE"
+    save_settings(settings, role=ROLE_ORGANIZER)
+
+    loaded = load_settings(ROLE_ORGANIZER)
+    remembered = loaded.organizer.squadron_ref()
+    assert remembered is not None
+    assert remembered.squadron_id == 110393
+    assert remembered.name == "MINING AND LOGISTICS LTD"
+    assert loaded.organizer.organizer_name == "CMDR HUGH JASSOLE"
+
+
+def test_forgetting_the_squadron_clears_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path))
+    from edsg.core.squadron import SquadronRef
+
+    settings = Settings()
+    settings.organizer.remember_squadron(SquadronRef(1, "Somewhere"))
+    settings.organizer.remember_squadron(None)
+    assert settings.organizer.squadron_ref() is None
+    assert not settings.organizer.has_squadron
+
+
+def test_a_malformed_squadron_id_degrades(tmp_path, monkeypatch):
+    """A hand-edited settings file must not stop the app starting."""
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path))
+    settings_path(ROLE_ORGANIZER).parent.mkdir(parents=True, exist_ok=True)
+    settings_path(ROLE_ORGANIZER).write_text(
+        json.dumps({"organizer": {"squadron_id": "not a number"}}),
+        encoding="utf-8",
+    )
+    assert load_settings(ROLE_ORGANIZER).organizer.squadron_ref() is None
 
 
 def test_branding_is_empty_by_default():

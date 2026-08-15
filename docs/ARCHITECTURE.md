@@ -21,7 +21,7 @@ src/edsg/
 │   ├── metrics.py        Single-pass scoring engine
 │   ├── models.py         Event, invitation and submission documents
 │   ├── palettes.py       Theme colours, with derived, contrast-checked tones
-│   ├── paths.py          Config dirs, journal discovery, the event workspace
+│   ├── paths.py          Per-role config dirs, journal discovery, workspace
 │   ├── settings.py       Appearance and branding, shared by both binaries
 │   ├── squadron.py       Membership reconciliation from journal evidence
 │   ├── standings.py      Verification, ranking, tie-breaks
@@ -151,6 +151,30 @@ Journal scanning takes seconds, so it runs on a `QThreadPool` worker. Qt
 widgets may only be touched from the UI thread, so the worker never receives
 one; it gets a `report` callable whose payload arrives back as a signal on the
 UI thread. See `gui/widgets.py`.
+
+## Configuration is per role
+
+The two binaries share an `EDSG` directory in the per-user configuration
+location, and each keeps its own configuration in a subdirectory of it:
+
+```
+EDSG/
+├── Organizer/
+│   ├── keys/organizer.key
+│   └── settings.json      appearance, branding, remembered squadron
+└── Participant/
+    ├── keys/participant.key
+    └── settings.json      appearance
+```
+
+`paths.set_role()` is called once at start-up by each entry point, and
+`config_dir()` resolves against it, so nothing downstream has to thread a role
+through. The shared CLI sets the role per command — `issue` and `close` are
+organizer actions, `participate` is not — because both binaries carry it.
+
+The separation is not tidiness. An organizer's signing key is the one whose
+fingerprint participants have been told to trust, and mixing the two roles in
+one folder means copying a configuration drags that key along with it.
 
 ## Settings and theming
 

@@ -40,7 +40,7 @@ from edsg.core.models import (
     Eligibility,
     Submission,
 )
-from edsg.core.paths import find_journal_dir
+from edsg.core.paths import ROLE_PARTICIPANT, find_journal_dir, set_role
 from edsg.core.settings import load_settings
 from edsg.core.workflow import Invitation, load_invitation, participate
 from edsg.gui.about import SupportStrip
@@ -556,6 +556,10 @@ def _format_units(value: float, measure: Measure) -> str:
 
 def main() -> int:
     """Entry point for the participant binary."""
+    # Set here as well as in the entry point, because this module can be
+    # run directly with ``python -m edsg.gui.participant``.
+    set_role(ROLE_PARTICIPANT)
+
     app = QApplication(sys.argv)
     app.setApplicationName("ED: Squad Goals")
     app.setApplicationDisplayName("ED: Squad Goals")

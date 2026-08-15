@@ -15,7 +15,20 @@ from dataclasses import dataclass
 from pathlib import Path
 
 APP_NAME = "EDSG"
-APP_DIRNAME = "edsg"
+
+#: The two binaries. Each keeps its own configuration under the shared
+#: EDSG directory, because they hold different things: an organizer has a
+#: signing identity whose fingerprint participants have been told to
+#: trust, plus squadron branding, and a participant has neither. Mixing
+#: them in one folder means copying a config between machines drags the
+#: other role's identity along with it.
+ROLE_ORGANIZER = "Organizer"
+ROLE_PARTICIPANT = "Participant"
+ROLES = (ROLE_ORGANIZER, ROLE_PARTICIPANT)
+
+#: Set by whichever binary is running. The CLI sets it per command, and
+#: each GUI entry point sets it before anything reads configuration.
+_active_role: str = ROLE_ORGANIZER
 
 #: Folder created beside the binary to hold every event's working files.
 EVENTS_DIRNAME = "Events"
@@ -28,11 +41,30 @@ def _windows_appdata() -> Path:
     return Path.home() / "AppData" / "Roaming"
 
 
-def config_dir() -> Path:
-    """Return the per-user EDSG configuration directory.
+def set_role(role: str) -> None:
+    """Record which binary is running.
 
-    Honours ``EDSG_CONFIG_DIR`` when set, which makes tests hermetic and
-    lets users keep organizer identities on removable media.
+    Called once at start-up, before anything reads configuration.
+    """
+    global _active_role
+    if role not in ROLES:
+        raise ValueError(f"Unknown role {role!r}; expected one of {ROLES}.")
+    _active_role = role
+
+
+def active_role() -> str:
+    """Return the role of the running binary."""
+    return _active_role
+
+
+def config_root() -> Path:
+    """Return the shared EDSG configuration directory.
+
+    This is the OS-appropriate per-user location, and it is the same for
+    both binaries. Per-role configuration lives in a subdirectory of it.
+
+    ``EDSG_CONFIG_DIR`` overrides it, which makes tests hermetic and lets
+    someone keep an organizer identity on removable media.
     """
     override = os.environ.get("EDSG_CONFIG_DIR")
     if override:
@@ -45,16 +77,28 @@ def config_dir() -> Path:
 
     xdg = os.environ.get("XDG_CONFIG_HOME")
     base = Path(xdg).expanduser() if xdg else Path.home() / ".config"
-    return base / APP_DIRNAME
+    # Capitalised to match the other platforms and the folder the user is
+    # told to look in; XDG has no convention requiring lowercase.
+    return base / APP_NAME
 
 
-def ensure_config_dir() -> Path:
+def config_dir(role: str | None = None) -> Path:
+    """Return the configuration directory for a role.
+
+    Defaults to the running binary's own role, so callers do not have to
+    thread it through. Everything a binary saves lives here: its signing
+    key, its preferences, and for the organizer its squadron details.
+    """
+    return config_root() / (role or _active_role)
+
+
+def ensure_config_dir(role: str | None = None) -> Path:
     """Create the configuration directory if needed and return it.
 
     On POSIX the directory is created with owner-only permissions because
     it holds private signing keys.
     """
-    path = config_dir()
+    path = config_dir(role)
     path.mkdir(parents=True, exist_ok=True)
     if os.name == "posix":
         # Non-fatal if it fails; key files carry their own mode regardless.
@@ -63,9 +107,9 @@ def ensure_config_dir() -> Path:
     return path
 
 
-def keys_dir() -> Path:
+def keys_dir(role: str | None = None) -> Path:
     """Return the directory holding signing identities."""
-    return config_dir() / "keys"
+    return config_dir(role) / "keys"
 
 
 def app_root() -> Path:
@@ -231,12 +275,16 @@ def find_journal_dir() -> Path | None:
 
 
 __all__ = [
-    "APP_DIRNAME",
     "APP_NAME",
     "EVENTS_DIRNAME",
+    "ROLES",
+    "ROLE_ORGANIZER",
+    "ROLE_PARTICIPANT",
     "EventPaths",
+    "active_role",
     "app_root",
     "config_dir",
+    "config_root",
     "default_journal_dirs",
     "ensure_config_dir",
     "event_paths",
@@ -244,4 +292,5 @@ __all__ = [
     "find_journal_dir",
     "keys_dir",
     "safe_folder_name",
+    "set_role",
 ]

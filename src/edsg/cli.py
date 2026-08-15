@@ -17,6 +17,7 @@ from edsg.core.crypto import load_or_create_identity
 from edsg.core.errors import EDSGError
 from edsg.core.journal import resolve_commander
 from edsg.core.models import INVITATION_SUFFIX, EventDefinition
+from edsg.core.paths import ROLE_ORGANIZER, ROLE_PARTICIPANT, set_role
 from edsg.core.workflow import (
     close_event,
     detect_squadron_from_journals,
@@ -82,6 +83,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 
 
 def _cmd_squadron(args: argparse.Namespace) -> int:
+    set_role(ROLE_ORGANIZER)
     squadron = detect_squadron_from_journals(Path(args.journals))
     if squadron is None:
         print("No current squadron membership found.", file=sys.stderr)
@@ -97,6 +99,9 @@ def _cmd_commander(args: argparse.Namespace) -> int:
 
 
 def _cmd_issue(args: argparse.Namespace) -> int:
+    # Issuing is an organizer action, so it uses the organizer's identity
+    # and settings even when invoked through the participant binary.
+    set_role(ROLE_ORGANIZER)
     data = json.loads(Path(args.event).read_text(encoding="utf-8"))
     event = EventDefinition.from_dict(data)
     identity = load_or_create_identity(args.identity, "EDSG event organizer")
@@ -107,6 +112,7 @@ def _cmd_issue(args: argparse.Namespace) -> int:
 
 
 def _cmd_participate(args: argparse.Namespace) -> int:
+    set_role(ROLE_PARTICIPANT)
     invitation = load_invitation(Path(args.invitation))
     identity = load_or_create_identity(args.identity, "EDSG participant")
     destination = Path(args.out)
@@ -138,6 +144,9 @@ def _load_event(path: Path) -> tuple[EventDefinition, str]:
 
 
 def _cmd_close(args: argparse.Namespace) -> int:
+    # Closing publishes reports, which carry the organizer's theme and
+    # squadron branding.
+    set_role(ROLE_ORGANIZER)
     event, fingerprint = _load_event(Path(args.event))
     if args.invitation:
         fingerprint = load_invitation(Path(args.invitation)).signer_fingerprint

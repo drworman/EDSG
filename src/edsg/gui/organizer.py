@@ -9,6 +9,7 @@ editing an event they built last week.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -50,8 +51,14 @@ from edsg.core.models import (
     EventWindow,
     TieBreak,
 )
-from edsg.core.paths import EventPaths, event_paths, find_journal_dir
-from edsg.core.settings import load_settings
+from edsg.core.paths import (
+    ROLE_ORGANIZER,
+    EventPaths,
+    event_paths,
+    find_journal_dir,
+    set_role,
+)
+from edsg.core.settings import load_settings, save_settings
 from edsg.core.workflow import (
     close_event,
     detect_squadron_from_journals,
@@ -111,6 +118,13 @@ class OrganizerWindow(QMainWindow):
         self.busy = False
         self.settings = load_settings()
         self.workspace: EventPaths | None = None
+
+        # A remembered squadron and organizer name are offered as the
+        # defaults, so a squadron running events regularly configures
+        # them once.
+        remembered = self.settings.organizer.squadron_ref()
+        if remembered is not None:
+            self.event_def.squadron = remembered
 
         self.setWindowTitle(window_title(ROLE))
         self.resize(1120, 860)
@@ -716,7 +730,18 @@ class OrganizerWindow(QMainWindow):
                 )
                 return
             self.event_def.squadron = squadron
-            self.log.write(f"Detected squadron {squadron}.", "good")
+
+            # Remembered so the next event does not need detecting again.
+            self.settings.organizer.remember_squadron(squadron)
+            try:
+                save_settings(self.settings)
+            except OSError as exc:
+                self.log.write(f"Could not save the squadron: {exc}", "warn")
+            else:
+                self.log.write(
+                    f"Detected squadron {squadron} — remembered for future events.",
+                    "good",
+                )
             self._refresh()
 
         def failed(exc: BaseException) -> None:
@@ -767,6 +792,12 @@ class OrganizerWindow(QMainWindow):
             self.log.write(f"Issue failed: {exc}", "bad")
             show_error(self, "Could not issue the invitation", exc)
             return
+
+        # The organizer's own name rarely changes between events either.
+        if self.event_def.organizer_name != self.settings.organizer.organizer_name:
+            self.settings.organizer.organizer_name = self.event_def.organizer_name
+            with contextlib.suppress(OSError):
+                save_settings(self.settings)
 
         self.invitation_fingerprint = self.identity.fingerprint
         self.invitation_picker.set_path(written)
@@ -1017,9 +1048,14 @@ class OrganizerWindow(QMainWindow):
             dangerous=True,
         ):
             return
-        self.event_def = EventDefinition(name="")
+        self.event_def = EventDefinition(
+            name="",
+            organizer_name=self.settings.organizer.organizer_name,
+            squadron=self.settings.organizer.squadron_ref(),
+        )
         self.invitation_fingerprint = ""
         self.report_dir = None
+        self.workspace = None
         self.invitation_picker.clear()
         self.submissions_picker.clear()
         self.standings_tree.clear()
@@ -1088,6 +1124,10 @@ def _safe_stem(name: str) -> str:
 
 def main() -> int:
     """Entry point for the organizer binary."""
+    # Set here as well as in the entry point, because this module can be
+    # run directly with ``python -m edsg.gui.organizer``.
+    set_role(ROLE_ORGANIZER)
+
     app = QApplication(sys.argv)
     app.setApplicationName("ED: Squad Goals")
     app.setApplicationDisplayName("ED: Squad Goals")

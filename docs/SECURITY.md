@@ -46,16 +46,25 @@ rather than guessing.
 ## Keys and fingerprints
 
 Each installation generates a signing identity on first run, stored in the
-per-user configuration directory:
+per-user configuration directory. **Each binary keeps its own**, under a
+folder named for its role:
 
 | Platform | Location |
 |---|---|
-| Windows | `%APPDATA%\EDSG\keys\` |
-| macOS | `~/Library/Application Support/EDSG/keys/` |
-| Linux | `~/.config/edsg/keys/` |
+| Windows | `%APPDATA%\EDSG\Organizer\` and `%APPDATA%\EDSG\Participant\` |
+| macOS | `~/Library/Application Support/EDSG/Organizer/` and `.../Participant/` |
+| Linux | `~/.config/EDSG/Organizer/` and `~/.config/EDSG/Participant/` |
 
-Set `EDSG_CONFIG_DIR` to move it — useful for keeping an organizer identity on
-removable media, or for testing.
+Each role directory holds a `keys/` folder and a `settings.json`.
+
+Separating them matters. An organizer's key is the one whose fingerprint
+participants have been told to trust; a participant's is not. Keeping them
+apart means copying a configuration between machines, or handing a laptop to
+someone to take part on, cannot carry an organizer identity along with it.
+
+Set `EDSG_CONFIG_DIR` to move the whole tree — useful for keeping an organizer
+identity on removable media, or for testing. The role folders are created
+inside whatever it points at.
 
 **Private keys are stored unencrypted**, with owner-only permissions (`0600`)
 on POSIX systems. This is a deliberate trade, and it is worth being clear what

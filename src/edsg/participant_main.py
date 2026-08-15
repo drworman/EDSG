@@ -12,6 +12,12 @@ import sys
 
 def main() -> int:
     """Launch the participant application, or the headless interface."""
+    # Declared before anything reads configuration, so every later
+    # lookup lands in this binary's own directory.
+    from edsg.core.paths import ROLE_PARTICIPANT, set_role
+
+    set_role(ROLE_PARTICIPANT)
+
     argv = sys.argv[1:]
     if argv and argv[0] == "--cli":
         # These binaries are built windowed, so on Windows they start

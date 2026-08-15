@@ -19,10 +19,19 @@ the encoding signatures are computed over.
 ## [20260811]
 
 ### Added
-- **Themes, shared between both binaries and the reports.** Seven palettes
-  ported from ED Linux Dash, plus per-colour overrides for a squadron's own
-  scheme. Preferences live in one file in the user configuration directory,
-  so the organizer and participant builds are configured once. See
+- **Per-binary configuration directories.** Each build now keeps everything it
+  saves under `EDSG/Organizer/` or `EDSG/Participant/` in the OS-appropriate
+  per-user location, rather than sharing one folder. An organizer's signing
+  key is the one whose fingerprint participants have been told to trust, so
+  copying a configuration between machines must not carry it into a
+  participant install.
+- **The organizer remembers its squadron.** A detected squadron, and the
+  organizer's own name, are stored and offered as the default for every
+  subsequent event. Detecting again overwrites them. Nothing here affects an
+  already-issued invitation, which has the squadron baked into its signature.
+- **Themes for both binaries and the reports.** Seven palettes ported from
+  ED Linux Dash, plus per-colour overrides for a squadron's own scheme. Set
+  per build, since each keeps its own configuration. See
   [docs/THEMES.md](docs/THEMES.md).
 - **Squadron branding on every report.** Name, tag, up to four contact
   details and a logo, printed top-left. The logo is embedded in the HTML as
@@ -100,6 +109,9 @@ the encoding signatures are computed over.
   items rather than deliveries.
 
 ### Changed
+- The Linux configuration directory is `~/.config/EDSG` rather than
+  `~/.config/edsg`, matching the other platforms and the folder name the
+  documentation tells people to look for.
 - Versions are `YYYYMMDD` datestamps; tags are the bare datestamp with no
   `v` prefix, and the release workflow triggers on any tag starting with a
   digit.

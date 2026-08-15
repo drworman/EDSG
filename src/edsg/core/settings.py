@@ -24,6 +24,7 @@ from edsg.core.palettes import (
     is_colour,
 )
 from edsg.core.paths import config_dir, ensure_config_dir
+from edsg.core.squadron import SquadronRef
 
 SETTINGS_FILENAME = "settings.json"
 
@@ -156,11 +157,72 @@ class Appearance:
 
 
 @dataclass
+class Organizer:
+    """What the organizer build remembers between events.
+
+    An organizer runs event after event for the same squadron, so making
+    them re-detect it every time is needless. The squadron is stored once
+    and offered as the default; detecting again overwrites it.
+
+    Read only by the organizer build. The participant's settings file
+    never contains it.
+    """
+
+    squadron_id: int = 0
+    squadron_name: str = ""
+    organizer_name: str = ""
+
+    @property
+    def has_squadron(self) -> bool:
+        return self.squadron_id > 0
+
+    def squadron_ref(self) -> SquadronRef | None:
+        """Return the remembered squadron, or ``None``."""
+        if not self.has_squadron:
+            return None
+        return SquadronRef(squadron_id=self.squadron_id, name=self.squadron_name)
+
+    def remember_squadron(self, squadron: SquadronRef | None) -> None:
+        """Record a detected squadron, or forget the current one."""
+        if squadron is None:
+            self.squadron_id = 0
+            self.squadron_name = ""
+            return
+        self.squadron_id = squadron.squadron_id
+        self.squadron_name = squadron.name
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "squadron_id": self.squadron_id,
+            "squadron_name": self.squadron_name,
+            "organizer_name": self.organizer_name,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> Organizer:
+        data = data or {}
+        try:
+            squadron_id = int(data.get("squadron_id", 0))
+        except (TypeError, ValueError):
+            squadron_id = 0
+        return cls(
+            squadron_id=max(squadron_id, 0),
+            squadron_name=str(data.get("squadron_name", "")),
+            organizer_name=str(data.get("organizer_name", "")),
+        )
+
+
+@dataclass
 class Settings:
-    """Everything both binaries remember between runs."""
+    """Everything a binary remembers between runs.
+
+    Stored per role, so the organizer's squadron and signing identity are
+    never carried into a participant install.
+    """
 
     appearance: Appearance = field(default_factory=Appearance)
     branding: Branding = field(default_factory=Branding)
+    organizer: Organizer = field(default_factory=Organizer)
     version: int = SETTINGS_VERSION
 
     def to_dict(self) -> dict[str, Any]:
@@ -168,6 +230,7 @@ class Settings:
             "version": self.version,
             "appearance": self.appearance.to_dict(),
             "branding": self.branding.to_dict(),
+            "organizer": self.organizer.to_dict(),
         }
 
     @classmethod
@@ -175,18 +238,19 @@ class Settings:
         return cls(
             appearance=Appearance.from_dict(data.get("appearance")),
             branding=Branding.from_dict(data.get("branding")),
+            organizer=Organizer.from_dict(data.get("organizer")),
             version=int(data.get("version", SETTINGS_VERSION)),
         )
 
 
-def settings_path() -> Path:
-    """Return the settings file location."""
-    return config_dir() / SETTINGS_FILENAME
+def settings_path(role: str | None = None) -> Path:
+    """Return the settings file location for a role."""
+    return config_dir(role) / SETTINGS_FILENAME
 
 
-def load_settings() -> Settings:
+def load_settings(role: str | None = None) -> Settings:
     """Read the settings, falling back to defaults on any problem."""
-    path = settings_path()
+    path = settings_path(role)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -199,10 +263,10 @@ def load_settings() -> Settings:
         return Settings()
 
 
-def save_settings(settings: Settings) -> Path:
+def save_settings(settings: Settings, role: str | None = None) -> Path:
     """Write the settings, returning the path written."""
-    ensure_config_dir()
-    path = settings_path()
+    ensure_config_dir(role)
+    path = settings_path(role)
     payload = json.dumps(settings.to_dict(), indent=2, sort_keys=True)
     path.write_text(payload + "\n", encoding="utf-8")
     return path
@@ -215,6 +279,7 @@ __all__ = [
     "Appearance",
     "Branding",
     "Contact",
+    "Organizer",
     "Settings",
     "load_settings",
     "save_settings",

@@ -43,6 +43,10 @@ five years of logs is scored only on the window.
   kick or disband. Someone who left mid-event is caught; someone who applied
   but never joined is caught.
 
+  **You only do this once.** The detected squadron is remembered and offered
+  as the default for every event you create afterwards. Detect again whenever
+  it changes.
+
   If detection finds nothing, log into the game while in your squadron so a
   `SquadronStartup` event is written, then try again.
 
@@ -170,8 +174,11 @@ regenerate from.
 contact details and logo at the top left of every report. **Appearance** sets
 the theme, which applies to both the interface and the generated reports.
 
-Both EDSG binaries share one settings file, so this is configured once per
-machine rather than once per build. See [THEMES.md](THEMES.md).
+Your squadron, your name and your branding are all remembered between events,
+so this is configured once rather than at every event. The organizer build
+keeps its settings in its own folder — `EDSG/Organizer/` under the
+per-user configuration directory — separate from the participant build.
+See [THEMES.md](THEMES.md).
 
 ## Reading the results
 

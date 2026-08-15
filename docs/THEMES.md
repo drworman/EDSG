@@ -4,13 +4,21 @@ EDSG shares one appearance setting between the organizer and participant
 builds, and applies it to both the interface and the reports. Configure it
 once in **Options → Preferences**.
 
-Settings live in a single file, so both binaries pick up the same choices:
+Each binary stores its settings under a folder named for its role:
 
 | Platform | Location |
 |---|---|
-| Windows | `%APPDATA%\EDSG\settings.json` |
-| macOS | `~/Library/Application Support/EDSG/settings.json` |
-| Linux | `~/.config/edsg/settings.json` |
+| Windows | `%APPDATA%\EDSG\Organizer\settings.json` |
+| macOS | `~/Library/Application Support/EDSG/Organizer/settings.json` |
+| Linux | `~/.config/EDSG/Organizer/settings.json` |
+
+Replace `Organizer` with `Participant` for the other build. They are kept
+apart because the organizer file holds things the participant has no business
+carrying — a signing identity participants have been told to trust, and the
+squadron details below.
+
+If you run both builds, set your theme in each. The trade is deliberate: one
+shared file would mean a participant install carrying an organizer identity.
 
 ## Themes
 
@@ -40,6 +48,23 @@ reason report headers were hard to read at all.
 
 Overrides are stored per colour, not as a whole palette, so switching theme
 afterwards keeps only what you actually changed.
+
+## What the organizer remembers
+
+Beyond appearance, the organizer build keeps a few things so a squadron
+running events regularly configures them once:
+
+| Remembered | Set by | Reused as |
+|---|---|---|
+| Squadron ID and name | *Detect from my journals* on the Event tab | The default for every new event |
+| Organizer name | Typed on the Event tab, saved when an invitation is issued | The default for every new event |
+| Squadron branding | Preferences → Squadron branding | The header of every report |
+
+Detecting again overwrites what was stored, so a commander who changes
+squadron simply re-detects. Nothing here affects an event that has already
+been issued: the squadron is baked into the signed invitation at that point.
+
+The participant build stores none of this.
 
 ## Squadron branding
 
