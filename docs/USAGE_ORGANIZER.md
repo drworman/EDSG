@@ -96,12 +96,26 @@ against Spansh** button for exactly this. It is advisory: Spansh does not know
 every name, and being offline says nothing about your spelling, so EDSG never
 blocks on it.
 
-**Optional: give the event a goal.** *Goal tiers & rewards* turns the event
-into something shaped like a Frontier community goal — a collective target
-broken into tiers, with reward bands ranking the commanders who contributed.
-See [GOALS.md](GOALS.md).
+**Every criterion needs a Unit Cap.** It is what the criterion races for: the
+total units it is worth across everybody, filled in the order the work
+happened. Once full, later work earns nothing. The caps together decide what
+the goal tiers are worth, so they are not optional. See [GOALS.md](GOALS.md).
 
-## 3 · Issue the invitation
+**Minimum per CMDR** is separate and optional — a participation floor, below
+which a commander scores nothing for that criterion.
+
+## 3 · Rewards
+
+Optional, and skippable for a plain leaderboard.
+
+Goal tier thresholds are worked out from your criteria — you never type a
+target. Untick the tiers you do not want and the rest rebalance. Set one
+figure, **Maximum Reward Pool in Credits**, and EDSG unlocks a share of it per
+tier reached and shares it out when the event closes.
+
+Nothing is paid if the goal does not reach Tier 1. See [GOALS.md](GOALS.md).
+
+## 4 · Issue the invitation
 
 The *Readiness* panel lists anything blocking you. When it is clear, click
 **Issue invitation**.
@@ -146,7 +160,7 @@ way to restore the event definition if you rebuild your machine.
 Use **File → Save event draft** to keep an editable `.edsgevent` copy. Drafts
 are not signed and are for your own use.
 
-## 4 · Collect submissions
+## 5 · Collect submissions
 
 Participants send back `.edsgs` files, each named for their Frontier ID.
 Put them in the event's `submissions` folder.

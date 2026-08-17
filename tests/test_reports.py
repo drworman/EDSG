@@ -22,15 +22,29 @@ def build_report(tmp_path, make_journal, simple_event, identity, tonnes=(10, 25)
     subs = tmp_path / "subs"
     for index, amount in enumerate(tonnes, start=1):
         fid = f"F000000{index}"
-        events = commander_events(f"CMDR {index}", fid) + [
-            {
-                "timestamp": "2026-06-05T10:00:00Z",
-                "event": "MiningRefined",
-                "Type": "$tritium_name;",
-                "Type_Localised": "Tritium",
-            }
-            for _ in range(amount)
-        ]
+        events = (
+            commander_events(f"CMDR {index}", fid)
+            + [
+                # Every event is squadron-locked, so participants have to be
+                # members for anything to score.
+                {
+                    "timestamp": "2026-06-01T12:00:03Z",
+                    "event": "SquadronStartup",
+                    "SquadronID": 110393,
+                    "SquadronName": "TEST SQUADRON",
+                    "CurrentRank": 3,
+                },
+            ]
+            + [
+                {
+                    "timestamp": "2026-06-05T10:00:00Z",
+                    "event": "MiningRefined",
+                    "Type": "$tritium_name;",
+                    "Type_Localised": "Tritium",
+                }
+                for _ in range(amount)
+            ]
+        )
         journal = make_journal(events, name=fid)
         participate(invitation, journal, generate_identity(fid), subs)
     return close_event(simple_event, subs, invitation.signer_fingerprint)

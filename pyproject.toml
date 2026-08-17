@@ -113,6 +113,12 @@ ignore_missing_imports = true
 module = ["winreg"]
 ignore_missing_imports = true
 
+# Optional at runtime: only imported as a fallback when a frozen build
+# has no usable certificate store.
+[[tool.mypy.overrides]]
+module = ["certifi"]
+ignore_missing_imports = true
+
 [tool.coverage.run]
 source = ["src/edsg"]
 omit = ["*/gui/*"]

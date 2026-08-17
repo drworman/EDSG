@@ -31,7 +31,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPlainTextEdit,
-    QRadioButton,
     QSplitter,
     QTabWidget,
     QTreeWidget,
@@ -72,8 +71,8 @@ from edsg.gui.about import SupportStrip
 from edsg.gui.criterion_dialog import edit_criterion
 from edsg.gui.menus import build_menus
 from edsg.gui.preferences import edit_preferences
+from edsg.gui.rewards_panel import RewardsPanel
 from edsg.gui.theme import COLOURS, apply_theme
-from edsg.gui.tier_dialog import edit_tiers
 from edsg.gui.widgets import (
     InfoPane,
     LogPane,
@@ -214,7 +213,9 @@ class OrganizerWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._event_tab(), "1 \u00b7 Event")
         self.tabs.addTab(self._criteria_tab(), "2 \u00b7 Criteria")
-        self.tabs.addTab(self._issue_tab(), "3 \u00b7 Issue invitation")
+        self.rewards_panel = RewardsPanel()
+        self.tabs.addTab(self.rewards_panel, "3 \u00b7 Rewards")
+        self.tabs.addTab(self._issue_tab(), "4 \u00b7 Issue invitation")
         self.tabs.addTab(self._close_tab(), "4 \u00b7 Close && publish")
         splitter.addWidget(self.tabs)
 
@@ -375,27 +376,29 @@ class OrganizerWindow(QMainWindow):
         )
         layout.addWidget(period)
 
-        eligibility = QGroupBox("Who can take part")
+        eligibility = QGroupBox("Your squadron")
         elig_layout = QVBoxLayout(eligibility)
-        self.open_radio = QRadioButton("Open to all commanders")
-        self.squadron_radio = QRadioButton("Restricted to my squadron")
-        self.open_radio.setChecked(True)
-        self.open_radio.toggled.connect(self._refresh)
-        elig_layout.addWidget(self.open_radio)
-        elig_layout.addWidget(self.squadron_radio)
 
         squad_row = QHBoxLayout()
         self.squadron_label = label("No squadron detected.", "hint")
         self.detect_button = button("Detect from my journals\u2026")
+        self.detect_button.setToolTip(
+            "Read your own journals to identify your squadron. You never "
+            "have to type an ID."
+        )
         self.detect_button.clicked.connect(self._detect_squadron)
         squad_row.addWidget(self.squadron_label, 1)
         squad_row.addWidget(self.detect_button)
         elig_layout.addLayout(squad_row)
         elig_layout.addWidget(
             label(
+                "Every event is limited to your own squadron. Elite has no "
+                "way to hand credits to a commander outside it \u2014 a "
+                "fleet carrier market loses a slice to fees and to the void, "
+                "while the squadron bank pays directly \u2014 so an open "
+                "event could not pay its winners.\n\n"
                 "Participants must show a join event for this squadron with "
-                "no later leave, kick or disband. EDSG reads your own "
-                "journals to identify the squadron so you never type an ID.",
+                "no later leave, kick or disband.",
                 "hint",
                 wrap=True,
             )
@@ -459,14 +462,6 @@ class OrganizerWindow(QMainWindow):
         remove = button("Remove", "danger")
         remove.clicked.connect(self._remove_criterion)
         row.addWidget(remove)
-        self.tiers_button = button("Goal tiers & rewards\u2026")
-        self.tiers_button.setToolTip(
-            "Optional: set a collective target with goal tiers, and reward "
-            "bands for the ranked commanders"
-        )
-        self.tiers_button.clicked.connect(self._edit_tiers)
-        row.addWidget(self.tiers_button)
-
         row.addStretch(1)
         up = button("Move up")
         up.clicked.connect(lambda: self._move(-1))
@@ -692,6 +687,8 @@ class OrganizerWindow(QMainWindow):
         self.log.write("Fingerprint copied to the clipboard.", "muted")
 
     def _collect(self) -> None:
+        if hasattr(self, "rewards_panel"):
+            self.event_def.tiers = self.rewards_panel.collect()
         self.event_def.name = self.name_field.text().strip()
         self.event_def.organizer_name = self.organizer_field.text().strip()
         self.event_def.description = self.description_field.toPlainText().strip()
@@ -707,15 +704,16 @@ class OrganizerWindow(QMainWindow):
                 else None
             ),
         )
-        self.event_def.eligibility = (
-            Eligibility.SQUADRON
-            if self.squadron_radio.isChecked()
-            else Eligibility.OPEN
-        )
+        # Always squadron-locked; there is no longer an open option.
+        self.event_def.eligibility = Eligibility.SQUADRON
         # Qt hands back a plain str for StrEnum user data; convert it.
         self.event_def.tie_break = TieBreak(self.tie_box.currentData())
 
     def _populate(self) -> None:
+        if hasattr(self, "rewards_panel"):
+            self.rewards_panel.load(
+                self.event_def.tiers, self.event_def.point_ceiling()
+            )
         self.name_field.setText(self.event_def.name)
         self.organizer_field.setText(self.event_def.organizer_name)
         self.description_field.setPlainText(self.event_def.description)
@@ -731,10 +729,6 @@ class OrganizerWindow(QMainWindow):
         if window.end:
             self.end_edit.setDateTime(_to_qt(window.end))
 
-        if self.event_def.eligibility is Eligibility.SQUADRON:
-            self.squadron_radio.setChecked(True)
-        else:
-            self.open_radio.setChecked(True)
         index = self.tie_box.findData(self.event_def.tie_break)
         if index >= 0:
             self.tie_box.setCurrentIndex(index)
@@ -767,6 +761,8 @@ class OrganizerWindow(QMainWindow):
 
     def _refresh(self) -> None:
         self._refresh_navigation()
+        if hasattr(self, "rewards_panel"):
+            self.rewards_panel.set_ceiling(self.event_def.point_ceiling())
         state, guidance = self.STATE_GUIDANCE[self.event_def.state]
         self.state_label.setText(state)
         self.next_step_label.setText(guidance)
@@ -779,7 +775,7 @@ class OrganizerWindow(QMainWindow):
             self.squadron_label.setProperty("role", "hint")
         self.squadron_label.style().unpolish(self.squadron_label)
         self.squadron_label.style().polish(self.squadron_label)
-        self.detect_button.setEnabled(self.squadron_radio.isChecked())
+        self.detect_button.setEnabled(not self.busy)
 
         self.criteria_tree.clear()
         for criterion in self.event_def.criteria:
@@ -833,10 +829,12 @@ class OrganizerWindow(QMainWindow):
                 ("Criteria", str(len(self.event_def.criteria))),
                 (
                     "Goal",
-                    f"{self.event_def.tiers.target:,.0f} points across "
-                    f"{len(self.event_def.tiers.goal_tiers)} tier(s)"
+                    f"{self.event_def.point_ceiling():,.0f} points across "
+                    f"{self.event_def.tiers.tier_count} tier(s), "
+                    f"{self.event_def.tiers.reward_pool:,.0f} "
+                    f"{self.event_def.tiers.currency} pool"
                     if self.event_def.tiers.enabled
-                    else "no goal tiers \u2014 plain leaderboard",
+                    else "no rewards \u2014 plain leaderboard",
                 ),
                 ("Tie-break", TIE_BREAK_LABELS[self.event_def.tie_break]),
             ]
@@ -904,24 +902,6 @@ class OrganizerWindow(QMainWindow):
             return
         self.event_def.criteria.remove(current)
         self.log.write(f"Removed criterion '{current.label}'.", "warn")
-        self._autosave()
-        self._refresh()
-
-    def _edit_tiers(self) -> None:
-        """Edit the goal tiers and reward bands."""
-        updated = edit_tiers(self, self.event_def.tiers)
-        if updated is None:
-            return
-        self.event_def.tiers = updated
-        if updated.enabled:
-            self.log.write(
-                f"Goal set: {updated.target:,.0f} points across "
-                f"{len(updated.goal_tiers)} tier(s), "
-                f"{len(updated.reward_bands)} reward band(s).",
-                "good",
-            )
-        else:
-            self.log.write("Goal tiers turned off.", "muted")
         self._autosave()
         self._refresh()
 

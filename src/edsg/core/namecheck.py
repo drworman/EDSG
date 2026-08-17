@@ -18,6 +18,7 @@ endpoint, no API key, stdlib only, short timeout.
 from __future__ import annotations
 
 import json
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -27,13 +28,15 @@ from enum import StrEnum
 #: Public typeahead endpoint. No key, no account.
 SPANSH_SEARCH = "https://spansh.co.uk/api/search"
 
+#: Sent so Spansh can see who is calling. Kept plain: some services
+#: reject a user agent containing a URL.
+USER_AGENT = "EDSG"
+
 #: Kept short. This runs while an organizer waits on a dialog.
 TIMEOUT_SECONDS = 8
 
 #: Spansh ignores very short queries, and so do we.
 MIN_QUERY = 3
-
-USER_AGENT = "EDSG (github.com/drworman/EDSG)"
 
 
 class Verdict(StrEnum):
@@ -95,13 +98,44 @@ def _normalise(value: str) -> str:
     return "".join(character for character in value.lower() if character.isalnum())
 
 
+def _ssl_context() -> ssl.SSLContext | None:
+    """Return an SSL context that can verify Spansh's certificate.
+
+    A frozen build does not always carry a certificate bundle, and the
+    resulting verification failure looks exactly like being offline.
+    Falling back to ``certifi`` when the system store is unusable makes
+    the difference, and returning ``None`` lets urllib use its default
+    when everything is already in order.
+    """
+    try:
+        context = ssl.create_default_context()
+    except Exception:
+        return None
+
+    # An empty store means verification will fail for every host.
+    try:
+        if context.cert_store_stats().get("x509_ca", 0) > 0:
+            return context
+    except Exception:
+        return context
+
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return context
+
+
 def _query_spansh(query: str) -> list[dict]:
     """Return raw Spansh results, raising on any failure."""
     params = urllib.parse.urlencode({"q": query})
     request = urllib.request.Request(
         f"{SPANSH_SEARCH}?{params}", headers={"User-Agent": USER_AGENT}
     )
-    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+    with urllib.request.urlopen(
+        request, timeout=TIMEOUT_SECONDS, context=_ssl_context()
+    ) as response:
         payload = json.load(response)
     results = payload.get("results")
     return results if isinstance(results, list) else []
@@ -125,14 +159,28 @@ def check_name(query: str, wanted: str) -> NameCheck:
             query=query,
             kind=kind,
             verdict=Verdict.UNAVAILABLE,
-            detail=f"Spansh replied {exc.code}",
+            detail=f"Spansh replied HTTP {exc.code} {exc.reason}",
         )
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except urllib.error.URLError as exc:
+        # The reason carries the real cause — a DNS failure, a refused
+        # connection, an expired certificate. Collapsing them all into
+        # "could not reach Spansh" leaves nobody able to say why.
+        reason = getattr(exc, "reason", exc)
+        detail = f"{reason.__class__.__name__}: {reason}"
+        if isinstance(reason, ssl.SSLError):
+            detail = (
+                f"TLS verification failed ({reason.__class__.__name__}). "
+                f"This build may be missing its certificate bundle."
+            )
+        return NameCheck(
+            query=query, kind=kind, verdict=Verdict.UNAVAILABLE, detail=detail
+        )
+    except (TimeoutError, OSError) as exc:
         return NameCheck(
             query=query,
             kind=kind,
             verdict=Verdict.UNAVAILABLE,
-            detail=f"no answer from Spansh ({exc.__class__.__name__})",
+            detail=f"{exc.__class__.__name__}: {exc}",
         )
     except (ValueError, json.JSONDecodeError):
         return NameCheck(
@@ -191,6 +239,19 @@ def summarise(checks: list[NameCheck]) -> tuple[list[NameCheck], bool]:
     return [item for item in checks if item.is_problem], answered
 
 
+def failure_detail(checks: list[NameCheck]) -> str:
+    """Return why the lookups failed, for showing to the user.
+
+    Without this a network problem reads as a bare "could not reach
+    Spansh", which tells nobody whether it is DNS, a proxy, a firewall
+    or a missing certificate bundle.
+    """
+    for item in checks:
+        if item.verdict is Verdict.UNAVAILABLE and item.detail:
+            return item.detail
+    return "no reason reported"
+
+
 __all__ = [
     "MIN_QUERY",
     "SPANSH_SEARCH",
@@ -199,5 +260,6 @@ __all__ = [
     "Verdict",
     "check_name",
     "check_names",
+    "failure_detail",
     "summarise",
 ]

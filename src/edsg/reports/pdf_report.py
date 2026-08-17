@@ -203,7 +203,7 @@ def _progress_flowables(report: StandingsReport, styles, accent) -> list:
 
     headline = (
         f"<b>{escape(progress.tier_text)}</b> &nbsp;&nbsp; "
-        f"<b>{progress.total:,.0f}</b> of {plan.target:,.0f} points "
+        f"<b>{progress.total:,.0f}</b> of {progress.ceiling:,.0f} points "
         f"&nbsp;&nbsp; {progress.fraction * 100:.2f}% &nbsp;&nbsp; "
         f"{progress.participants} contributor(s)"
     )
@@ -239,14 +239,17 @@ def _progress_flowables(report: StandingsReport, styles, accent) -> list:
             f"{progress.to_next_tier:,.0f} more points to reach "
             f"{escape(progress.next_tier.label)}."
         )
-    elif plan.goal_tiers:
+    elif progress.goal_tiers:
         note = "Every goal tier reached."
     else:
         note = ""
-    if progress.multiplier != 1.0:
+    if progress.rewards_unlocked:
         note += (
-            f" Rewards are paid at &times;{progress.multiplier:g} for the tier reached."
+            f" {escape(progress.tier_text)} unlocks {progress.pool:,.0f} "
+            f"{escape(plan.currency)} of the {plan.reward_pool:,.0f} maximum."
         )
+    elif plan.reward_pool:
+        note += " No rewards are paid: the goal did not reach Tier 1."
     if note:
         flowables.append(Paragraph(note, styles["cell_small"]))
         flowables.append(Spacer(1, 6))
@@ -258,7 +261,7 @@ def _progress_flowables(report: StandingsReport, styles, accent) -> list:
             Paragraph("<b>Reached</b>", styles["cell"]),
         ]
     ]
-    for index, tier in enumerate(plan.goal_tiers, start=1):
+    for index, tier in enumerate(progress.goal_tiers, start=1):
         reached = "yes" if index <= progress.tiers_reached else "\u2014"
         rows.append(
             [
@@ -283,7 +286,7 @@ def _progress_flowables(report: StandingsReport, styles, accent) -> list:
     ]
     for award in progress.awards:
         payout = (
-            f"{award.payout:,.0f} {escape(plan.currency)}" if award.payout else "\u2014"
+            f"{award.each:,.0f} {escape(plan.currency)}" if award.each else "\u2014"
         )
         reward_rows.append(
             [

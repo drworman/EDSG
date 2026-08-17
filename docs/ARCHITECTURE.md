@@ -20,6 +20,7 @@ src/edsg/
 │   ├── location.py       Tracks position; resolves MarketID to a station
 │   ├── metrics.py        Single-pass scoring engine
 │   ├── models.py         Event, invitation and submission documents
+│   ├── allocation.py     Filling unit caps in the order work happened
 │   ├── namecheck.py      Advisory system and station lookups via Spansh
 │   ├── palettes.py       Theme colours, with derived, contrast-checked tones
 │   ├── paths.py          Per-role config dirs, journal discovery, workspace
@@ -41,7 +42,7 @@ src/edsg/
     ├── about.py          About dialog and the funding links
     ├── menus.py          The menu bar shared by both windows
     ├── preferences.py    Theme, custom colours and squadron branding
-    ├── tier_dialog.py    Goal tiers, reward bands and escalation
+    ├── rewards_panel.py  Goal tiers and the reward pool
     ├── theme.py          Stylesheet, driven by core.palettes
     ├── widgets.py        Shared widgets and the background worker
     ├── criterion_dialog.py
@@ -128,6 +129,20 @@ Unknown event types are simply carried through — Frontier adds them with every
 update, and the catch-all `event_count` metric can score them by name without a
 new EDSG release.
 
+## A capped criterion is a race
+
+Scoring each submission in isolation cannot express a finite cap. Two
+commanders who each refine 60 tonnes against a 100-tonne cap would each be
+credited 60, totalling 120 against a cap of 100.
+
+So `core/allocation.py` merges every commander's timestamped contributions,
+sorts them by when the work happened, and fills the cap from the front. The
+result does not depend on submission order at all.
+
+This is why a unit cap is mandatory, and it is what bounds submission size: a
+commander only needs to send their earliest events covering the cap, since
+nothing past that could score even if they led the whole way.
+
 ## Two kinds of tier
 
 `core/tiers.py` keeps two ideas apart that are easy to conflate, because
@@ -143,9 +158,10 @@ best they qualify for. That is what makes Frontier's tables read the way they
 do, with `Top 10 CMDRs` showing a *higher* contribution range than the
 `Top 25%` row beneath it rather than being contained by it.
 
-Escalation is a multiplier per goal tier rather than a payout per
-band-and-tier pair. Both describe the same matrix; one takes ten inputs from
-an organizer and the other twenty-five.
+The organizer sets a single maximum pool. It unlocks a share per goal tier
+reached, and is divided by **place** rather than by tier — dividing by tier
+lets eleventh place out-earn first whenever turnout is uneven, because a tier
+holding one commander would split the same slice ten commanders share.
 
 ## Talking to the network
 

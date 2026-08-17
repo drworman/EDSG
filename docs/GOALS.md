@@ -1,8 +1,9 @@
 # Goal tiers and rewards
 
-An event can be a plain leaderboard, or it can carry a **goal**: a
-collective target the whole squadron pushes toward, with rewards for the
-commanders who did the pushing.
+Every event runs as a community goal in Frontier's shape: a collective
+target the whole squadron pushes toward, with rewards for the commanders
+who did the pushing. Rewards themselves are optional — leave them off for
+a plain leaderboard.
 
 The shape follows Frontier's own community goals, because that is the format
 squadrons already know how to read. Two things are happening at once, and
@@ -22,76 +23,110 @@ Leave it off and reports look exactly as they did before.
 
 ## Goal tiers
 
-Set a **target** — the total points from everyone combined that completes the
-goal — then define up to five tiers on the way there.
+**You never type a target.** The top tier in use is worth exactly what your
+criteria are worth: every criterion's unit cap multiplied by its points per
+unit, added together. That number cannot drift out of step with the criteria,
+because it *is* the criteria.
 
-You can type the thresholds, or let EDSG work them out:
+The tiers below it step down in equal shares. Untick the ones you do not want
+— for a four-tier event, untick Tier 5 — and the rest rebalance themselves:
 
-| Button | Does |
+| Tiers in use | Step | Thresholds, on a 16,000-point event |
+|---|---|---|
+| 5 | 20% | 3,200 · 6,400 · 9,600 · 12,800 · 16,000 |
+| 4 | 25% | 4,000 · 8,000 · 12,000 · 16,000 |
+| 3 | 33% | 5,333 · 10,667 · 16,000 |
+
+Tiers are listed from the top down, the way a goal is read. **Five is the
+maximum**, matching Frontier.
+
+**Tier 1 is the floor.** If the squadron does not reach it, no rewards are
+paid at all — the event did not achieve what it set out to.
+
+## The unit cap, and why it matters more than it looks
+
+Every criterion needs a **Unit Cap**. It is not just a limit on runaway
+scoring; it is what the criterion races for.
+
+A capped criterion is filled **in the order the work happened**, across
+everybody. If a criterion is capped at 100 tonnes of tritium, the hundredth
+tonne refined ends it — regardless of whose submission arrived first:
+
+| Time | Commander | Refined | Cap filled | Credited |
+|---|---|---:|---:|---:|
+| 10:00 | A | 43 | 43 | 43 |
+| 11:00 | B | 60 | 100 | 57 |
+| 12:00 | A | 70 | 100 | 0 |
+
+CMDR A refined more over the window and submitted first, and is still
+credited 43, because CMDR B did the work that filled the cap.
+
+This is why submissions carry the timestamp of each scoring event, and why
+the cap is required: it bounds how much of a journal has to travel. A
+commander only ever needs to send their earliest events covering the cap,
+because nothing past that could score even if they led the whole way.
+
+### Minimum per CMDR
+
+A separate, optional participation floor. A commander credited fewer units
+than the minimum scores nothing for that criterion, which keeps a token
+contribution out of the rewards. Their units are not redistributed — that
+would change who filled the cap and when.
+
+## Reward tiers
+
+Set one number: **Maximum Reward Pool in Credits**. That is the most you will
+pay out in total, across everyone, and it is only reached if every goal tier
+is reached.
+
+The pool unlocks a share per tier. On a five-tier event with a 500,000,000
+pool:
+
+| Reached | Unlocked |
 |---|---|
-| **Even split of target** | Divides the target into equal steps. Any remainder goes into the first tier, so the later thresholds stay round and the last lands exactly on the target. |
-| **20% steps down from target** | Works downward from the target: 100%, 80%, 60%, 40%, 20%. |
-| **20% steps up from Tier 1** | Works upward from whatever Tier 1 is set to. Use this when you know what a realistic first tier looks like but not where the ceiling is. |
+| Below Tier 1 | nothing |
+| Tier 1 | 100,000,000 |
+| Tier 3 | 300,000,000 |
+| Tier 5 | 500,000,000 |
 
-Thresholds must increase, and the last cannot exceed the target. EDSG refuses
-to issue an invitation otherwise, since neither mistake can be corrected once
-the invitation is signed.
+There is no escalation to configure. The growth *is* the escalation.
 
-**Five is the maximum**, matching Frontier. More tiers than that stop being
-readable on a progress board.
+### How the pool is shared out
 
-## Reward bands
-
-Bands rank the commanders who contributed. Each band selects its members one
-of two ways:
+Reward tiers select commanders one of two ways:
 
 - **Top N commanders** — a fixed count, like Frontier's `Top 10 CMDRs`.
 - **Top X% of field** — a share of everyone who took part.
 
-Bands fill **from the top down, and each commander is paid by the best band
-they reach**. So a `Top 10 CMDRs` band sits *above* `Top 25%` rather than
-inside it, and nobody is paid twice. This is how Frontier's own tables read:
-their `Top 10 CMDRs` row shows a higher contribution range than the `Top 25%`
-row beneath it.
+Tiers fill **from the top down, and each commander is paid from the best tier
+they reach**, so `Top 10 CMDRs` sits *above* `Top 25%` rather than inside it
+and nobody is paid twice.
 
-The default layout is Frontier's, and **Reset to Frontier's layout** puts it
-back:
+The unlocked pool is then divided by **place**, not by tier, with places in
+higher tiers worth more — five parts, four, three, two, one. Dividing by tier
+instead produces an absurdity whenever turnout is uneven: a tier holding one
+commander would split the same slice that ten commanders share, and eleventh
+place would out-earn first.
 
-```
-Top 10 CMDRs    top 10 commanders
-Top 25%         top 25% of field
-Top 50%         top 50% of field
-Top 75%         top 75% of field
-Top 100%        everyone who took part
-```
+Because it is per place, the amounts depend on turnout as well as on the tier
+reached. Both are worked out when the event closes.
 
-With a small field the lower bands may come out empty. They are still shown
-on the board, so participants can see what a bigger turnout would have paid.
+## The distribution matrix
 
-## Escalation
-
-Every band's reward is multiplied by the escalation figure for the tier the
-goal reached. Leave them all at 1 for flat rewards.
-
-| At tier | 1 | 2 | 3 | 4 | 5 |
-|---|---|---|---|---|---|
-| Multiplier | ×1 | ×1.5 | ×2 | ×3 | ×4.5 |
-
-A `Top 10 CMDRs` band paying 50,000,000 pays 100,000,000 if the squadron
-reaches Tier 3.
-
-This is why the configuration is ten inputs rather than twenty-five: a base
-payout per band and a multiplier per tier describe the same matrix Frontier
-publishes, without asking you to fill in every cell.
+Closing a tiered event publishes a table of every commander, the tier they
+landed in, their points, and the exact figure they are owed — ordered so an
+organizer can work down it one payment at a time.
 
 ## What the reports show
 
 Every format carries the board:
 
 - **HTML** — the tier readout, a meter with each threshold marked and reached
-  tiers picked out, how far the next tier is, and the reward table.
+  tiers picked out, how far the next tier is, the reward tier table and the
+  full distribution matrix.
 - **PDF** — the same, drawn to print cleanly in black and white.
-- **Markdown** — a text meter that pastes into Discord.
+- **Markdown** — a text meter that pastes into Discord, with a
+  who-receives-what table.
 - **JSON** — the whole structure under a `progress` key, for a bot or site.
 
 The reward table shows, per band, how many commanders fell into it, the

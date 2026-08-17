@@ -89,11 +89,18 @@ def window():
 
 @pytest.fixture
 def simple_event(window):
+    """A minimal valid event.
+
+    Squadron-locked with a capped criterion, because both are now
+    required: credits can only be handed over through the squadron bank,
+    and the cap is what a capped criterion races for.
+    """
     return EventDefinition(
         name="Test Event",
         organizer_name="CMDR Organizer",
         window=window,
-        eligibility=Eligibility.OPEN,
+        eligibility=Eligibility.SQUADRON,
+        squadron=SquadronRef(squadron_id=110393, name="TEST SQUADRON"),
         criteria=[
             Criterion(
                 criterion_id="mining01",
@@ -102,6 +109,7 @@ def simple_event(window):
                 measure=Measure.TONNAGE,
                 filters=Filters(commodities=["Tritium"]),
                 points_per_unit=2.0,
+                unit_cap=1000,
             )
         ],
     )

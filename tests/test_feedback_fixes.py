@@ -221,3 +221,130 @@ def test_autosave_ignores_an_unnamed_event(qt_app, tmp_path, monkeypatch):
         assert not (tmp_path / "home" / "Events").exists()
     finally:
         window.deleteLater()
+
+
+# -- squadron-only events ----------------------------------------------
+
+
+def test_every_event_is_squadron_locked(simple_event):
+    """Credits can only be handed over through the squadron bank, so an
+    open event could not pay its winners."""
+    from edsg.core.models import Eligibility
+
+    assert simple_event.eligibility is Eligibility.SQUADRON
+    assert not simple_event.validate()
+
+    simple_event.squadron = None
+    problems = simple_event.validate()
+    assert any("squadron" in item.lower() for item in problems)
+
+
+def test_a_new_event_defaults_to_squadron():
+    from edsg.core.models import Eligibility, EventDefinition
+
+    assert EventDefinition(name="X").eligibility is Eligibility.SQUADRON
+
+
+def test_the_organizer_offers_no_open_option(qt_app, tmp_path, monkeypatch):
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("EDSG_HOME", str(tmp_path / "home"))
+    from edsg.gui.organizer import OrganizerWindow
+
+    window = OrganizerWindow()
+    try:
+        assert not hasattr(window, "open_radio")
+        assert not hasattr(window, "squadron_radio")
+    finally:
+        window.deleteLater()
+
+
+# -- the unit cap is required ------------------------------------------
+
+
+def test_a_criterion_without_a_unit_cap_is_refused():
+    """The cap is what the criterion races for, and it bounds how much
+    of a journal a submission has to carry."""
+    from edsg.core.criteria import Criterion, Measure, MetricKind
+
+    criterion = Criterion(
+        criterion_id="x",
+        label="Uncapped",
+        kind=MetricKind.MINING_REFINED,
+        measure=Measure.TONNAGE,
+    )
+    assert any("unit cap" in item.lower() for item in criterion.validate())
+
+    criterion.unit_cap = 100
+    assert not criterion.validate()
+
+
+def test_the_point_ceiling_is_the_sum_of_the_caps(simple_event):
+    # One criterion: 1000 units at 2 points each.
+    assert simple_event.point_ceiling() == 2000.0
+
+
+# -- the Rewards tab ----------------------------------------------------
+
+
+def test_the_rewards_tab_sits_between_criteria_and_issue(qt_app, tmp_path, monkeypatch):
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("EDSG_HOME", str(tmp_path / "home"))
+    from edsg.gui.organizer import OrganizerWindow
+
+    window = OrganizerWindow()
+    try:
+        titles = [window.tabs.tabText(i) for i in range(window.tabs.count())]
+        assert len(titles) == 5
+        assert "Criteria" in titles[1]
+        assert "Rewards" in titles[2]
+        assert "Issue" in titles[3]
+    finally:
+        window.deleteLater()
+
+
+def test_tier_thresholds_follow_the_criteria(qt_app):
+    """Unticking a tier rebalances the rest, and nothing is typed."""
+    from edsg.core.tiers import TierPlan, default_reward_bands
+    from edsg.gui.rewards_panel import RewardsPanel
+
+    panel = RewardsPanel()
+    try:
+        panel.load(
+            TierPlan(
+                enabled=True,
+                tier_count=5,
+                reward_pool=500,
+                reward_bands=default_reward_bands(),
+            ),
+            2000.0,
+        )
+        # Listed from the top down.
+        assert panel.tier_rows[0].index == 5
+        assert panel.tier_rows[-1].index == 1
+        assert panel.tier_rows[0].threshold.text() == "2,000"
+        assert panel.tier_rows[-1].threshold.text() == "400"
+
+        panel.tier_rows[0].enabled.setChecked(False)
+        assert panel.tier_count() == 4
+        # The top tier in use is still the full ceiling.
+        assert panel.tier_rows[1].threshold.text() == "2,000"
+        assert panel.tier_rows[-1].threshold.text() == "500"
+    finally:
+        panel.deleteLater()
+
+
+def test_at_least_one_goal_tier_always_remains(qt_app):
+    from edsg.core.tiers import TierPlan, default_reward_bands
+    from edsg.gui.rewards_panel import RewardsPanel
+
+    panel = RewardsPanel()
+    try:
+        panel.load(
+            TierPlan(enabled=True, reward_pool=10, reward_bands=default_reward_bands()),
+            1000.0,
+        )
+        for row in panel.tier_rows:
+            row.enabled.setChecked(False)
+        assert panel.tier_count() >= 1
+    finally:
+        panel.deleteLater()

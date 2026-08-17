@@ -1,4 +1,4 @@
-"""Goal tiers, reward bands and the progress board."""
+"""Goal tiers, reward pools and the distribution matrix."""
 
 from __future__ import annotations
 
@@ -6,16 +6,18 @@ from dataclasses import dataclass
 
 import pytest
 
+from edsg.core.criteria import Criterion, Measure, MetricKind
+from edsg.core.models import EventDefinition
 from edsg.core.tiers import (
     MAX_GOAL_TIERS,
-    GoalTier,
     RewardBand,
     TierPlan,
+    band_weights,
     build_progress,
     default_reward_bands,
-    even_tiers,
-    tiers_from_step,
 )
+
+CEILING = 2000.0
 
 
 @dataclass
@@ -27,148 +29,159 @@ class FakeStanding:
     total_points: float
 
 
-def field_of(count: int, top: float = 1000.0, step: float = 25.0):
+def field_of(count: int, top: float = 200.0, step: float = 5.0):
     return [
         FakeStanding(f"CMDR {index:02d}", f"F{index:07d}", top - index * step)
         for index in range(count)
     ]
 
 
-# -- tier construction --------------------------------------------------
-
-
-def test_even_tiers_end_exactly_on_the_target():
-    tiers = even_tiers(350_000_000, 5)
-    assert len(tiers) == 5
-    assert tiers[-1].threshold == 350_000_000
-    assert [tier.threshold for tier in tiers] == sorted(
-        tier.threshold for tier in tiers
-    )
-
-
-def test_an_uneven_target_puts_the_remainder_in_the_first_tier():
-    """Later thresholds stay round and the last lands on the target."""
-    tiers = even_tiers(1003, 3)
-    assert tiers[-1].threshold == 1003
-    assert tiers[0].threshold == 335  # 334 + remainder of 1
-    assert tiers[1].threshold == 669
-
-
-def test_tiers_are_capped_at_five():
-    assert len(even_tiers(1000, 99)) == MAX_GOAL_TIERS
-
-
-def test_stepping_down_from_the_target():
-    tiers = tiers_from_step(1000, 5, from_top=True)
-    assert [tier.threshold for tier in tiers] == [200, 400, 600, 800, 1000]
-
-
-def test_stepping_up_from_the_first_tier():
-    tiers = tiers_from_step(1000, 3, from_top=False)
-    assert [tier.threshold for tier in tiers] == [1000, 1200, 1400]
-
-
-def test_no_tiers_without_a_target():
-    assert even_tiers(0, 5) == []
-    assert tiers_from_step(0, 5, from_top=True) == []
-
-
-# -- progress -----------------------------------------------------------
-
-
-def test_tier_reached_counts_cleared_thresholds():
-    plan = TierPlan(enabled=True, target=1000, goal_tiers=even_tiers(1000, 5))
-    assert plan.tier_reached(0) == 0
-    assert plan.tier_reached(200) == 1
-    assert plan.tier_reached(650) == 3
-    assert plan.tier_reached(5000) == 5
-
-
-def test_the_multiplier_follows_the_tier_reached():
-    plan = TierPlan(
+def plan_of(tier_count: int = 5, pool: float = 500_000_000.0) -> TierPlan:
+    return TierPlan(
         enabled=True,
-        target=1000,
-        goal_tiers=even_tiers(1000, 5),
-        escalation=[1.0, 1.5, 2.0, 3.0, 4.5],
-    )
-    assert plan.multiplier_for(0) == 1.0
-    assert plan.multiplier_for(3) == 2.0
-    assert plan.multiplier_for(5) == 4.5
-    # More tiers reached than multipliers supplied holds at the last.
-    assert plan.multiplier_for(9) == 4.5
-
-
-def test_progress_is_clamped_to_the_target():
-    plan = TierPlan(enabled=True, target=100)
-    assert plan.progress_fraction(-5) == 0.0
-    assert plan.progress_fraction(50) == 0.5
-    assert plan.progress_fraction(500) == 1.0
-
-
-# -- reward bands -------------------------------------------------------
-
-
-def test_a_fixed_band_sits_above_the_percentile_bands():
-    """Frontier's tables read this way: Top 10 CMDRs is above Top 25%,
-    not inside it, so nobody is paid from two bands."""
-    plan = TierPlan(
-        enabled=True,
-        target=1_000_000,
-        goal_tiers=even_tiers(1_000_000, 5),
+        tier_count=tier_count,
+        reward_pool=pool,
         reward_bands=default_reward_bands(),
     )
-    report = build_progress(plan, field_of(40))
-
-    counts = [award.count for award in report.awards]
-    assert counts[0] == 10
-    assert sum(counts) == 40
-
-    everyone = [name for award in report.awards for name in award.commanders]
-    assert len(everyone) == len(set(everyone)), "a commander was paid twice"
 
 
-def test_band_payouts_scale_with_the_tier_reached():
-    plan = TierPlan(
-        enabled=True,
-        target=100,
-        goal_tiers=[GoalTier("Tier 1", 50), GoalTier("Tier 2", 100)],
-        reward_bands=[RewardBand(label="All", percentile=100.0, payout=1_000_000)],
-        escalation=[2.0, 5.0],
-    )
-    # Two commanders at 60 points each clears both tiers.
-    report = build_progress(plan, field_of(2, top=60, step=0))
-    assert report.tiers_reached == 2
-    assert report.awards[0].payout == 5_000_000
+# -- tiers are derived, never typed -------------------------------------
 
 
-def test_empty_bands_are_still_reported():
-    """The board should show what a band would have paid."""
-    plan = TierPlan(
-        enabled=True,
-        target=100,
-        reward_bands=[
-            RewardBand(label="Top 10 CMDRs", top_count=10, payout=500),
-            RewardBand(label="Rest", percentile=100.0, payout=100),
+def test_the_top_tier_is_the_events_point_ceiling():
+    """The organizer never types a target; it comes from the caps."""
+    event = EventDefinition(
+        name="X",
+        criteria=[
+            Criterion(
+                criterion_id="a",
+                label="Tritium",
+                kind=MetricKind.MINING_REFINED,
+                measure=Measure.TONNAGE,
+                points_per_unit=1.0,
+                unit_cap=1000,
+            ),
+            Criterion(
+                criterion_id="b",
+                label="Bodies",
+                kind=MetricKind.BODIES_SCANNED,
+                measure=Measure.DISTINCT,
+                points_per_unit=5.0,
+                unit_cap=200,
+            ),
         ],
     )
-    report = build_progress(plan, field_of(3))
+    assert event.point_ceiling() == 2000.0
+    tiers = plan_of().tiers_for(event.point_ceiling())
+    assert tiers[-1].threshold == 2000.0
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [
+        (5, [400, 800, 1200, 1600, 2000]),
+        (4, [500, 1000, 1500, 2000]),
+        (2, [1000, 2000]),
+        (1, [2000]),
+    ],
+)
+def test_unticking_a_tier_rebalances_the_rest(count, expected):
+    """Five tiers step in twentieths, four in quarters, and so on."""
+    tiers = plan_of(tier_count=count).tiers_for(CEILING)
+    assert [tier.threshold for tier in tiers] == expected
+
+
+def test_tier_count_is_capped_at_five():
+    assert len(plan_of(tier_count=99).tiers_for(CEILING)) == MAX_GOAL_TIERS
+
+
+def test_no_tiers_without_a_ceiling():
+    assert plan_of().tiers_for(0) == []
+
+
+# -- the reward pool ----------------------------------------------------
+
+
+def test_the_pool_grows_a_share_per_tier():
+    plan = plan_of(tier_count=5, pool=500)
+    assert plan.pool_for(1) == 100
+    assert plan.pool_for(3) == 300
+    assert plan.pool_for(5) == 500
+
+
+def test_nothing_is_paid_below_tier_one():
+    """Tier 1 is the floor: under it the event achieved nothing."""
+    plan = plan_of(pool=500)
+    assert plan.pool_for(0) == 0.0
+
+    report = build_progress(plan, field_of(4, top=10, step=0), CEILING)
+    assert report.tiers_reached == 0
+    assert not report.rewards_unlocked
+    assert report.pool == 0.0
+    assert all(award.each == 0 for award in report.awards)
+
+
+def test_reaching_every_tier_unlocks_the_whole_pool():
+    plan = plan_of(pool=500)
+    report = build_progress(plan, field_of(10, top=1000, step=0), CEILING)
+    assert report.tiers_reached == 5
+    assert report.pool == 500
+
+
+# -- distribution -------------------------------------------------------
+
+
+def test_a_place_in_a_higher_tier_is_always_worth_more():
+    """Weighing whole tiers rather than places would let eleventh
+    place out-earn first whenever the tiers were uneven."""
+    report = build_progress(plan_of(), field_of(18, top=1000, step=1), CEILING)
+    paid = [award.each for award in report.awards if award.count]
+    assert paid == sorted(paid, reverse=True)
+    assert paid[0] > paid[-1]
+
+
+def test_the_pool_is_never_exceeded():
+    for count in (1, 2, 7, 18, 40, 137):
+        report = build_progress(
+            plan_of(pool=500_000_000), field_of(count, top=1000, step=1), CEILING
+        )
+        spent = sum(award.each * award.count for award in report.awards)
+        assert spent <= report.pool + 1.0, f"{count} participants overspent"
+
+
+def test_weights_descend_by_tier():
+    assert band_weights(5) == [5.0, 4.0, 3.0, 2.0, 1.0]
+    assert band_weights(0) == []
+
+
+def test_every_commander_is_paid_from_exactly_one_tier():
+    report = build_progress(plan_of(), field_of(40, top=1000, step=1), CEILING)
+    seen = [fid for award in report.awards for _, fid, _ in award.commanders]
+    assert len(seen) == len(set(seen)) == 40
+
+
+def test_a_fixed_tier_sits_above_the_percentile_tiers():
+    report = build_progress(plan_of(), field_of(40, top=1000, step=1), CEILING)
+    assert report.awards[0].count == 10
+    assert report.awards[0].highest_points >= report.awards[1].highest_points
+
+
+def test_an_empty_tier_pays_nothing():
+    report = build_progress(plan_of(), field_of(3, top=1000, step=1), CEILING)
     assert report.awards[0].count == 3
-    assert report.awards[1].count == 0
-    assert report.awards[1].payout == 0.0
+    assert report.awards[-1].count == 0
+    assert report.awards[-1].each == 0.0
 
 
 def test_progress_with_no_participants():
-    plan = TierPlan(enabled=True, target=100, reward_bands=default_reward_bands())
-    report = build_progress(plan, [])
+    report = build_progress(plan_of(), [], CEILING)
     assert report.total == 0
     assert report.participants == 0
-    assert report.tiers_reached == 0
-    assert all(award.count == 0 for award in report.awards)
+    assert not report.rewards_unlocked
 
 
 def test_the_tier_text_matches_frontiers_wording():
-    plan = TierPlan(enabled=True, target=1000, goal_tiers=even_tiers(1000, 5))
-    report = build_progress(plan, field_of(4, top=100, step=0))
+    report = build_progress(plan_of(), field_of(4, top=250, step=0), CEILING)
     assert report.tier_text == "Tier 2/5"
 
 
@@ -176,55 +189,43 @@ def test_the_tier_text_matches_frontiers_wording():
 
 
 def test_a_disabled_plan_needs_no_validation():
-    assert TierPlan().validate() == []
+    assert TierPlan().validate(0) == []
 
 
-def test_tiers_must_increase():
-    plan = TierPlan(
-        enabled=True,
-        target=1000,
-        goal_tiers=[GoalTier("A", 500), GoalTier("B", 200)],
-    )
-    assert any("increase" in problem for problem in plan.validate())
+def test_a_plan_needs_something_to_measure():
+    assert any("nothing to measure" in item for item in plan_of().validate(0))
 
 
-def test_a_tier_above_the_target_is_refused():
-    plan = TierPlan(enabled=True, target=100, goal_tiers=[GoalTier("A", 500)])
-    assert any("above the" in problem for problem in plan.validate())
+def test_a_plan_needs_at_least_one_reward_tier():
+    plan = TierPlan(enabled=True, reward_pool=100, reward_bands=[])
+    assert any("at least one reward tier" in item for item in plan.validate(100))
 
 
-def test_a_band_needs_a_count_or_a_percentile():
-    plan = TierPlan(enabled=True, target=100, reward_bands=[RewardBand(label="Broken")])
-    assert any("count or a percentile" in problem for problem in plan.validate())
+def test_a_negative_pool_is_refused():
+    plan = plan_of(pool=-1)
+    assert any("cannot be negative" in item for item in plan.validate(CEILING))
 
 
 @pytest.mark.parametrize("percentile", [0, -5, 101])
 def test_percentiles_outside_the_range_are_refused(percentile):
     plan = TierPlan(
         enabled=True,
-        target=100,
+        reward_pool=100,
         reward_bands=[RewardBand(label="X", percentile=percentile)],
     )
-    assert any("percentile" in problem for problem in plan.validate())
+    assert any("percentile" in item for item in plan.validate(CEILING))
 
 
 # -- serialisation ------------------------------------------------------
 
 
 def test_a_plan_survives_a_round_trip():
-    plan = TierPlan(
-        enabled=True,
-        target=16000,
-        currency="Cr",
-        goal_tiers=even_tiers(16000, 5),
-        reward_bands=default_reward_bands(),
-        escalation=[1.0, 1.5, 2.0, 3.0, 4.5],
-    )
+    plan = plan_of(tier_count=4, pool=250_000_000)
     restored = TierPlan.from_dict(plan.to_dict())
-    assert restored.target == plan.target
-    assert len(restored.goal_tiers) == 5
+    assert restored.tier_count == 4
+    assert restored.reward_pool == 250_000_000
+    assert len(restored.reward_bands) == 5
     assert restored.reward_bands[0].top_count == 10
-    assert restored.escalation == plan.escalation
 
 
 def test_an_event_carries_its_plan_through_an_invitation(
@@ -232,18 +233,12 @@ def test_an_event_carries_its_plan_through_an_invitation(
 ):
     from edsg.core.workflow import issue_invitation, load_invitation
 
-    simple_event.tiers = TierPlan(
-        enabled=True,
-        target=5000,
-        goal_tiers=even_tiers(5000, 3),
-        reward_bands=default_reward_bands(),
-        escalation=[1.0, 2.0, 3.0],
-    )
+    simple_event.tiers = plan_of(tier_count=3, pool=90_000_000)
     invitation = load_invitation(issue_invitation(simple_event, identity, tmp_path))
     carried = invitation.event.tiers
     assert carried.enabled
-    assert carried.target == 5000
-    assert len(carried.goal_tiers) == 3
+    assert carried.tier_count == 3
+    assert carried.reward_pool == 90_000_000
 
 
 def test_a_plain_event_has_no_progress(simple_event):

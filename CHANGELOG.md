@@ -18,6 +18,45 @@ the encoding signatures are computed over.
 
 ## [20260816]
 
+### Changed
+- **Every event is now limited to the organizer's squadron.** The open
+  option is gone. Elite has no way to hand credits to a commander outside
+  your squadron without routing them through a fleet carrier market, which
+  loses a slice to fees; the squadron bank pays directly. An event that
+  cannot pay its winners is not worth running.
+- **A unit cap is required on every criterion.** The cap is what a
+  criterion races for, and it bounds how much of a journal a submission has
+  to carry. "Cap at" is now **Unit Cap**, and "Minimum" is **Minimum per
+  CMDR** — a participation floor, below which a commander scores nothing
+  for that criterion.
+- **Goal tiers are derived, not typed.** The top tier in use is worth every
+  unit cap added together, and the rest step down in equal shares, so five
+  tiers step in twentieths and four in quarters. Untick a tier and the
+  others rebalance. The target field and the calculate row are gone, and
+  tiers are listed from Tier 5 down to Tier 1.
+- **Rewards are configured with one number.** "Maximum Reward Pool in
+  Credits" replaces per-tier payouts and manual escalation. The pool
+  unlocks a share per goal tier reached and is only whole when every tier
+  is; below Tier 1 nothing is paid at all.
+- Goal tiers and rewards moved from a dialog to a **Rewards tab**, between
+  Criteria and Issue invitation.
+- The Spansh check now says exactly why it failed — an HTTP code, a DNS
+  error, a certificate problem — rather than a bare "could not reach
+  Spansh", and falls back to a bundled certificate store when a frozen
+  build has none. It only ever checks systems and stations.
+
+### Added
+- **Capped criteria are filled in the order the work happened.** Scoring
+  each submission alone could not express a finite race: two commanders who
+  each refined 60 tonnes against a 100-tonne cap were both credited 60.
+  Submissions now carry the timestamp of every scoring event, and closing
+  merges them across everybody and fills the cap chronologically. Whoever
+  did the work first is credited first, whatever order the submissions
+  arrive in. `SCHEMA_VERSION` is 2; older submissions still verify and
+  score, but cannot take part in a capped race, and the report says so.
+- **A reward distribution matrix** at close: every commander, the tier they
+  landed in, their points and the exact figure they are owed.
+
 Everything below closes out feedback from external testing, plus the goal
 tier system. Document schema is unchanged at `SCHEMA_VERSION` 1 and
 signatures still use `edsg-canonical-json-1`, so invitations and

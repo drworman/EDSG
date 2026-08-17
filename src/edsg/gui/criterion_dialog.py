@@ -33,7 +33,7 @@ from edsg.core.criteria import (
     MetricKind,
     MissionOutcome,
 )
-from edsg.core.namecheck import check_names, summarise
+from edsg.core.namecheck import check_names, failure_detail, summarise
 from edsg.gui.widgets import (
     CheckRow,
     TagField,
@@ -180,9 +180,11 @@ class CriterionDialog(QDialog):
         check_row = QHBoxLayout()
         self.check_button = button("Check names against Spansh")
         self.check_button.setToolTip(
-            "Look up the systems and stations you have typed. Advisory "
-            "only \u2014 EDSG never blocks on this, and a name Spansh has "
-            "not heard of may still be perfectly valid."
+            "Look up the system and station names you have typed. Only "
+            "those two can be checked \u2014 commodities, factions and "
+            "station types are not places Spansh knows about. Advisory "
+            "only: EDSG never blocks on this, and a name Spansh has not "
+            "heard of may still be perfectly valid."
         )
         self.check_button.clicked.connect(self._check_names)
         self.check_result = label("", "hint", wrap=True)
@@ -218,24 +220,38 @@ class CriterionDialog(QDialog):
         row.addWidget(self.points_spin)
 
         self.cap_field = QLineEdit()
-        self.cap_field.setPlaceholderText("no cap")
+        self.cap_field.setPlaceholderText("required")
         self.cap_field.setMaximumWidth(120)
-        row.addWidget(label("Cap at"))
+        self.cap_field.setToolTip(
+            "How many units this criterion is worth in total, across "
+            "everybody. Required."
+        )
+        row.addWidget(label("Unit Cap"))
         row.addWidget(self.cap_field)
 
         self.minimum_field = QLineEdit()
         self.minimum_field.setPlaceholderText("none")
         self.minimum_field.setMaximumWidth(120)
-        row.addWidget(label("Minimum"))
+        self.minimum_field.setToolTip(
+            "Units a single commander must reach before any of their work "
+            "here scores. Optional."
+        )
+        row.addWidget(label("Minimum per CMDR"))
         row.addWidget(self.minimum_field)
         row.addStretch(1)
         scoring_layout.addLayout(row)
 
         scoring_layout.addWidget(
             label(
-                "A cap limits how many units can convert to points, so one "
-                "runaway category cannot decide the whole event. A minimum "
-                "must be reached before any units score at all.",
+                "The <b>Unit Cap</b> is what this criterion races for: the "
+                "total units it is worth across everybody, filled in the "
+                "order the work happened. Once it is full, later work earns "
+                "nothing \u2014 so the caps together decide what the goal "
+                "tiers are worth. It is required.<br/><br/>"
+                "The <b>Minimum per CMDR</b> is a participation floor. A "
+                "commander credited fewer units than this scores nothing "
+                "here, which keeps a token contribution out of the rewards. "
+                "Leave it blank for no floor.",
                 "hint",
                 wrap=True,
             )
@@ -396,9 +412,13 @@ class CriterionDialog(QDialog):
             problems, answered = summarise(checks)
             if not answered:
                 self.check_result.setText(
-                    "Could not reach Spansh, so nothing was checked. This "
-                    "says nothing about your spelling."
+                    f"Could not reach Spansh, so nothing was checked "
+                    f"\u2014 {failure_detail(checks)}. This says nothing "
+                    f"about your spelling."
                 )
+                self.check_result.setProperty("role", "hint")
+                self.check_result.style().unpolish(self.check_result)
+                self.check_result.style().polish(self.check_result)
                 return
             if not problems:
                 self.check_result.setText(f"All {len(checks)} name(s) found on Spansh.")

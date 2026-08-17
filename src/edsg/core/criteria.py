@@ -377,7 +377,12 @@ class Criterion:
     measure: Measure
     filters: Filters = field(default_factory=Filters)
     points_per_unit: float = 1.0
+    #: Required. The cap is what makes a criterion a finite race: it is
+    #: filled chronologically across every participant, so it also bounds
+    #: how much of a commander's journal has to travel in a submission.
     unit_cap: float | None = None
+    #: Optional participation floor. A commander allocated fewer units
+    #: than this scores nothing for the criterion.
     minimum_units: float | None = None
     criterion_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     notes: str = ""
@@ -405,9 +410,9 @@ class Criterion:
             base = f"{base} ({detail})"
         scoring = f"{self.points_per_unit:g} pt/unit"
         if self.unit_cap is not None:
-            scoring += f", capped at {self.unit_cap:g}"
+            scoring += f", unit cap {self.unit_cap:g}"
         if self.minimum_units is not None:
-            scoring += f", minimum {self.minimum_units:g}"
+            scoring += f", {self.minimum_units:g} minimum per CMDR"
         return f"{base} — {scoring}"
 
     def validate(self) -> list[str]:
@@ -430,7 +435,13 @@ class Criterion:
             )
         if self.points_per_unit == 0:
             problems.append(f"{self.label}: points per unit is zero.")
-        if self.unit_cap is not None and self.unit_cap <= 0:
+        if self.unit_cap is None:
+            problems.append(
+                f"{self.label or 'This criterion'}: set a unit cap. The cap "
+                f"is what the event is racing for, and it decides how much "
+                f"of each commander's journal has to be submitted."
+            )
+        elif self.unit_cap <= 0:
             problems.append(f"{self.label}: unit cap must be above zero.")
         if self.minimum_units is not None and self.minimum_units < 0:
             problems.append(f"{self.label}: minimum units cannot be negative.")

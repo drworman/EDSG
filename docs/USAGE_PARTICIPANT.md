@@ -99,6 +99,15 @@ EDSG-Participant --cli inspect F10467336.edsgs
 Bear in mind your organizer will see your commander name and Frontier ID. That
 is unavoidable in a scored competition, but it is worth knowing.
 
+## Getting your work counted early
+
+If the event has capped criteria, they are filled **in the order the work
+happened** — not the order submissions arrive. Refining the tonne that fills
+a cap credits you, even if somebody else sends their file in first.
+
+That also means work done after a cap is full earns nothing, so there is no
+advantage in sitting on a submission, and none in rushing one either.
+
 ## Making it readable
 
 **Options → Preferences** offers seven themes and per-colour overrides, so

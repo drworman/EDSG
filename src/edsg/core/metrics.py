@@ -127,6 +127,16 @@ class Accumulator:
     # though it behaves correctly at runtime.
     breakdown: dict[str, float] = field(default_factory=dict)
     samples: list[str] = field(default_factory=list)
+    #: Every scoring event as ``(timestamp, units)``, in the order it
+    #: happened. The organizer merges these across all participants at
+    #: closing time and fills the unit cap chronologically, so whoever
+    #: did the work first is credited first, not whoever submitted
+    #: first. Truncated once this criterion's own cap is covered.
+    contributions: list[tuple[str, float]] = field(default_factory=list)
+    contributed: float = 0.0
+    #: Set by the evaluator before each event is offered, so handlers do
+    #: not each have to thread a timestamp through their own call.
+    current_stamp: str = ""
 
     def add(
         self,
@@ -143,15 +153,33 @@ class Accumulator:
                 if token in self.distinct_keys:
                     return
                 self.distinct_keys.add(token)
-            self.units += 1.0
+            scored = 1.0
         else:
-            self.units += amount
+            scored = amount
+        self.units += scored
+        self._record(scored)
         if key:
             self.breakdown[key] = self.breakdown.get(key, 0.0) + (
                 amount if amount else 1.0
             )
         if sample and len(self.samples) < MAX_SAMPLES:
             self.samples.append(sample)
+
+    def _record(self, scored: float) -> None:
+        """Log one contribution, up to this criterion's cap.
+
+        Only the earliest events covering the cap can ever score, however
+        the field turns out: even a commander who led the whole way
+        cannot claim more than the cap. Recording past that point would
+        bloat every submission to no purpose.
+        """
+        if not self.current_stamp or not scored:
+            return
+        cap = self.criterion.unit_cap
+        if cap is not None and self.contributed >= cap:
+            return
+        self.contributions.append((self.current_stamp, round(scored, 4)))
+        self.contributed += scored
 
     def result(self) -> CriterionResult:
         counted, points = self.criterion.score(self.units)
@@ -160,6 +188,7 @@ class Accumulator:
         return CriterionResult(
             criterion_id=self.criterion.criterion_id,
             label=self.criterion.label,
+            contributions=list(self.contributions),
             raw_units=round(self.units, 4),
             counted_units=round(counted, 4),
             points=round(points, 4),
@@ -305,6 +334,11 @@ class MetricEvaluator:
         handler = _HANDLERS.get(accumulator.criterion.kind)
         if handler is None:
             return
+        # Recorded here rather than in each of the fourteen handlers, so
+        # a new metric cannot forget to timestamp its contributions.
+        accumulator.current_stamp = (
+            entry.timestamp.isoformat() if entry.timestamp else ""
+        )
         handler(self, accumulator, entry)
 
     def results(self) -> list[CriterionResult]:

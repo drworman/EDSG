@@ -77,7 +77,7 @@ def build_markdown(report: StandingsReport, style: ReportStyle | None = None) ->
         )
         lines.append("")
         lines.append(
-            f"**{progress.total:,.0f}** of {plan.target:,.0f} points from "
+            f"**{progress.total:,.0f}** of {progress.ceiling:,.0f} points from "
             f"{progress.participants} contributor(s)."
         )
         if progress.next_tier is not None:
@@ -86,41 +86,57 @@ def build_markdown(report: StandingsReport, style: ReportStyle | None = None) ->
                 f"{progress.to_next_tier:,.0f} more points to reach "
                 f"{progress.next_tier.label}."
             )
-        elif plan.goal_tiers:
+        elif progress.goal_tiers:
             lines.append("")
             lines.append("Every goal tier reached.")
         lines.append("")
 
         lines.append("| Tier | Threshold | Reached |")
         lines.append("|---|---:|:---:|")
-        for index, tier in enumerate(plan.goal_tiers, start=1):
+        for index, tier in enumerate(progress.goal_tiers, start=1):
             mark = "yes" if index <= progress.tiers_reached else "\u2014"
             lines.append(f"| {_escape(tier.label)} | {tier.threshold:,.0f} | {mark} |")
         lines.append("")
 
         lines.append("## Reward tiers")
         lines.append("")
-        if progress.multiplier != 1.0:
+        if progress.rewards_unlocked:
             lines.append(
-                f"_Rewards paid at \u00d7{progress.multiplier:g} for "
-                f"{progress.tier_text}._"
+                f"_{progress.tier_text} unlocks {progress.pool:,.0f} "
+                f"{plan.currency} of the {plan.reward_pool:,.0f} maximum._"
             )
-            lines.append("")
-        lines.append("| Reward tier | CMDRs | Points | Reward each |")
-        lines.append("|---|---:|---:|---:|")
+        elif plan.reward_pool:
+            lines.append("_No rewards are paid: the goal did not reach Tier 1._")
+        lines.append("")
+
+        lines.append("| Reward tier | CMDRs | Points | Each | Tier total |")
+        lines.append("|---|---:|---:|---:|---:|")
         for award in progress.awards:
-            payout = (
-                f"{award.payout:,.0f} {plan.currency}" if award.payout else "\u2014"
-            )
+            each = f"{award.each:,.0f} {plan.currency}" if award.each else "\u2014"
+            subtotal = f"{award.pool:,.0f}" if award.pool else "\u2014"
             lines.append(
                 f"| {_escape(award.band.label)} | {award.count} "
-                f"| {_escape(award.range_text())} | {payout} |"
+                f"| {_escape(award.range_text())} | {each} | {subtotal} |"
             )
         lines.append("")
+
+        if progress.rewards_unlocked and any(award.count for award in progress.awards):
+            lines.append("### Who receives what")
+            lines.append("")
+            lines.append("| Reward tier | Commander | Points | Receives |")
+            lines.append("|---|---|---:|---:|")
+            for award in progress.awards:
+                for name, _fid, points in award.commanders:
+                    lines.append(
+                        f"| {_escape(award.band.label)} "
+                        f"| CMDR {_escape(name)} | {points:,.0f} "
+                        f"| {award.each:,.0f} {plan.currency} |"
+                    )
+            lines.append("")
+
         lines.append(
-            "_Each commander is paid by the highest band they reach. "
-            "Rewards are worked out by EDSG and paid in game by the "
-            "organizer._"
+            "_Each commander is paid from the highest tier they reach. "
+            "EDSG works the amounts out; the organizer pays them in game._"
         )
         lines.append("")
 

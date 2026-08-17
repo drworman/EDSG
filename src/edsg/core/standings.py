@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from edsg.core.allocation import CriterionAllocation, allocate_all
 from edsg.core.crypto import fingerprint, verify_document
 from edsg.core.errors import DocumentError, EDSGError, SignatureError
 from edsg.core.models import (
@@ -76,6 +77,8 @@ class StandingsReport:
     standings: list[Standing]
     accepted: list[LoadedSubmission]
     rejected: list[LoadedSubmission]
+    #: How each capped criterion filled, in the order the work happened.
+    allocations: dict[str, CriterionAllocation] = field(default_factory=dict)
     generated_at: str = field(
         default_factory=lambda: datetime.now(UTC).isoformat(timespec="seconds")
     )
@@ -98,7 +101,9 @@ class StandingsReport:
         """Return tier progress, or ``None`` when the event has no plan."""
         if not self.event.tiers.enabled:
             return None
-        return build_progress(self.event.tiers, self.standings)
+        return build_progress(
+            self.event.tiers, self.standings, self.event.point_ceiling()
+        )
 
     def criterion_labels(self) -> list[str]:
         return [criterion.label for criterion in self.event.criteria]
@@ -108,6 +113,9 @@ class StandingsReport:
         return {
             "event": self.event.to_dict(),
             "progress": progress.to_dict() if progress else None,
+            "allocations": {
+                key: value.to_dict() for key, value in self.allocations.items()
+            },
             "generated_at": self.generated_at,
             "generator_version": self.generator_version,
             "participant_count": self.participant_count,
@@ -298,6 +306,49 @@ def build_standings(
             return (primary, -scored, submission.commander_name)
         return (primary, submission.commander_name.lower())
 
+    # Capped criteria are filled chronologically across everyone before
+    # anybody is ranked, so a commander is credited for the work they
+    # did in time rather than for the submission that arrived first.
+    contributions: dict[str, dict[str, list[tuple[str, float]]]] = {}
+    legacy: dict[str, list[str]] = {}
+    for item in accepted:
+        submission = item.submission
+        assert submission is not None
+        for result in submission.results:
+            per_criterion = contributions.setdefault(result.criterion_id, {})
+            if result.contributions:
+                per_criterion[submission.commander_fid] = result.contributions
+            else:
+                # A submission from before timestamped contributions, or
+                # a criterion that matched nothing. Credit what it claims
+                # so an older build is not silently zeroed, and record it
+                # so the report can say the race was not clean.
+                per_criterion[submission.commander_fid] = [("", result.counted_units)]
+                if result.counted_units:
+                    legacy.setdefault(result.criterion_id, []).append(
+                        submission.commander_fid
+                    )
+
+    allocations = allocate_all(event.criteria, contributions, legacy)
+
+    for item in accepted:
+        submission = item.submission
+        assert submission is not None
+        total = 0.0
+        for result in submission.results:
+            allocation = allocations.get(result.criterion_id)
+            if allocation is None:
+                continue
+            entry = allocation.allocated.get(submission.commander_fid)
+            if entry is None:
+                result.counted_units = 0.0
+                result.points = 0.0
+                continue
+            result.counted_units = entry.units
+            result.points = entry.points
+            total += entry.points
+        submission.total_points = round(total, 4)
+
     ordered = sorted(accepted, key=sort_key)
 
     standings: list[Standing] = []
@@ -345,6 +396,7 @@ def build_standings(
         standings=standings,
         accepted=ordered,
         rejected=rejected,
+        allocations=allocations,
         generator_version=generator_version,
     )
 

@@ -24,7 +24,14 @@ from edsg.core.workflow import (
 )
 
 
-def mining_journal(make_journal, tonnes, name="TESTER", fid="F1234567", squadron=None):
+def mining_journal(
+    make_journal, tonnes, name="TESTER", fid="F1234567", squadron=110393
+):
+    """Build a journal for a commander in the test squadron.
+
+    Membership is included by default because every event is now
+    squadron-locked; pass ``squadron=None`` to build an outsider.
+    """
     events = commander_events(name, fid)
     if squadron is not None:
         events.append(
@@ -224,7 +231,9 @@ def test_squadron_event_excludes_a_non_member(
     simple_event.squadron = squadron
     invitation = load_invitation(issue_invitation(simple_event, identity, tmp_path))
 
-    journal = mining_journal(make_journal, 10, fid="F2")  # no squadron events
+    # Explicitly outside the squadron: the helper now puts commanders in
+    # it by default, because every event is squadron-locked.
+    journal = mining_journal(make_journal, 10, fid="F2", squadron=None)
     _, submission, membership = participate(
         invitation, journal, generate_identity("p"), tmp_path / "subs"
     )

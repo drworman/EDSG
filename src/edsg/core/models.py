@@ -37,7 +37,12 @@ SUBMISSION_SUFFIX = ".edsgs"
 
 #: Bumped when the document schema changes in a way older builds cannot
 #: read. Distinct from the application version.
-SCHEMA_VERSION = 1
+#: Raised to 2 when submissions began carrying timestamped
+#: contributions, which is what lets an organizer fill a unit cap in the
+#: order the work happened rather than the order submissions arrived.
+#: A version 1 submission still verifies and still scores; it simply
+#: cannot take part in a capped race, and the standings say so.
+SCHEMA_VERSION = 2
 
 
 class EventState(StrEnum):
@@ -127,7 +132,7 @@ class EventDefinition:
     description: str = ""
     event_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     window: EventWindow = field(default_factory=EventWindow)
-    eligibility: Eligibility = Eligibility.OPEN
+    eligibility: Eligibility = Eligibility.SQUADRON
     squadron: SquadronRef | None = None
     criteria: list[Criterion] = field(default_factory=list)
     tiers: TierPlan = field(default_factory=TierPlan)
@@ -147,12 +152,14 @@ class EventDefinition:
         if not self.criteria:
             problems.append("Add at least one scoring criterion.")
         problems.extend(self.window.validate())
-        if self.eligibility is Eligibility.SQUADRON and self.squadron is None:
+        if self.squadron is None:
             problems.append(
-                "This event is restricted to a squadron, but no squadron "
-                "has been identified. Scan your own journals to detect it."
+                "No squadron has been identified. Every event is limited to "
+                "your own squadron, because credits can only be handed over "
+                "through the squadron bank. Detect it from your journals on "
+                "the Event tab."
             )
-        problems.extend(self.tiers.validate())
+        problems.extend(self.tiers.validate(self.point_ceiling()))
         labels: dict[str, int] = {}
         for criterion in self.criteria:
             problems.extend(criterion.validate())
@@ -194,7 +201,7 @@ class EventDefinition:
                 f"EDSG understands up to v{SCHEMA_VERSION}. Update EDSG."
             )
         try:
-            eligibility = Eligibility(data.get("eligibility", "open"))
+            eligibility = Eligibility(data.get("eligibility", "squadron"))
             tie_break = TieBreak(
                 data.get("tie_break", TieBreak.EARLIEST_SUBMISSION.value)
             )
@@ -224,6 +231,20 @@ class EventDefinition:
             closed_at=data.get("closed_at"),
         )
 
+    def point_ceiling(self) -> float:
+        """Return the most this event can be worth, in points.
+
+        Every criterion is capped, so the maximum is simply each cap
+        converted to points and added up. This is what the top goal tier
+        is set to, which is why it never needs typing.
+        """
+        total = 0.0
+        for criterion in self.criteria:
+            if criterion.unit_cap is None:
+                continue
+            total += criterion.unit_cap * criterion.points_per_unit
+        return round(total, 4)
+
     def criterion_by_id(self, criterion_id: str) -> Criterion | None:
         for criterion in self.criteria:
             if criterion.criterion_id == criterion_id:
@@ -242,6 +263,11 @@ class CriterionResult:
     points: float
     detail: dict[str, Any] = field(default_factory=dict)
     samples: list[str] = field(default_factory=list)
+    #: ``(timestamp, units)`` for every scoring event, oldest first, up
+    #: to the criterion's unit cap. The organizer merges these across
+    #: participants and fills the cap in the order the work actually
+    #: happened.
+    contributions: list[tuple[str, float]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -252,6 +278,7 @@ class CriterionResult:
             "points": self.points,
             "detail": self.detail,
             "samples": self.samples,
+            "contributions": [[stamp, units] for stamp, units in self.contributions],
         }
 
     @classmethod
@@ -264,6 +291,11 @@ class CriterionResult:
             points=float(data.get("points", 0.0)),
             detail=dict(data.get("detail") or {}),
             samples=[str(item) for item in (data.get("samples") or [])],
+            contributions=[
+                (str(item[0]), float(item[1]))
+                for item in (data.get("contributions") or [])
+                if isinstance(item, (list, tuple)) and len(item) >= 2
+            ],
         )
 
 

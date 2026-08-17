@@ -76,6 +76,9 @@ def test_saving_produces_a_valid_criterion(dialog):
     dialog.commodities_field.setText("Steel, CMM Composite")
     dialog.market_ids_field.setText("3955868162")
     dialog.points_spin.setValue(0.5)
+    # Required now: without it validation fails and _save opens a modal
+    # error dialog, which would hang the test run.
+    dialog.cap_field.setText("5000")
     dialog._save()
 
     criterion = dialog.result_criterion
@@ -84,6 +87,7 @@ def test_saving_produces_a_valid_criterion(dialog):
     assert criterion.measure is Measure.TONNAGE
     assert criterion.filters.commodities == ["Steel", "CMM Composite"]
     assert criterion.filters.market_ids == [3955868162]
+    assert criterion.unit_cap == 5000
     assert not criterion.validate()
 
 
@@ -167,6 +171,7 @@ def test_preview_populates_the_standings_table(app, tmp_path, monkeypatch):
         EventState,
         EventWindow,
     )
+    from edsg.core.squadron import SquadronRef
     from edsg.core.workflow import issue_invitation, load_invitation, participate
     from edsg.gui.organizer import OrganizerWindow
     from edsg.gui.widgets import wait_for_workers
@@ -177,7 +182,8 @@ def test_preview_populates_the_standings_table(app, tmp_path, monkeypatch):
             start=parse_timestamp("2026-06-01T00:00:00Z"),
             end=parse_timestamp("2026-06-30T23:59:59Z"),
         ),
-        eligibility=Eligibility.OPEN,
+        eligibility=Eligibility.SQUADRON,
+        squadron=SquadronRef(squadron_id=110393, name="TEST SQUADRON"),
         criteria=[
             Criterion(
                 criterion_id="m1",
@@ -186,6 +192,7 @@ def test_preview_populates_the_standings_table(app, tmp_path, monkeypatch):
                 measure=Measure.TONNAGE,
                 filters=Filters(commodities=["Tritium"]),
                 points_per_unit=1.0,
+                unit_cap=500,
             )
         ],
     )
@@ -203,6 +210,14 @@ def test_preview_populates_the_standings_table(app, tmp_path, monkeypatch):
             "event": "Commander",
             "FID": "F1",
             "Name": "PREVIEW",
+        },
+        # Membership is required: every event is squadron-locked.
+        {
+            "timestamp": "2026-06-01T12:00:02Z",
+            "event": "SquadronStartup",
+            "SquadronID": 110393,
+            "SquadronName": "TEST SQUADRON",
+            "CurrentRank": 3,
         },
         *(
             {
