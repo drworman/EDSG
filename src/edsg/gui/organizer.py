@@ -12,9 +12,10 @@ from __future__ import annotations
 import contextlib
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
-from PySide6.QtCore import QDateTime, Qt
+from PySide6.QtCore import QDate, QDateTime, Qt, QTime
 from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -72,6 +73,7 @@ from edsg.gui.criterion_dialog import edit_criterion
 from edsg.gui.menus import build_menus
 from edsg.gui.preferences import edit_preferences
 from edsg.gui.theme import COLOURS, apply_theme
+from edsg.gui.tier_dialog import edit_tiers
 from edsg.gui.widgets import (
     InfoPane,
     LogPane,
@@ -97,6 +99,10 @@ from edsg.version import read_version
 #: Extension for an organizer's editable working copy of an event.
 DRAFT_SUFFIX = ".edsgevent"
 
+#: Written into an event's workspace folder whenever the event changes,
+#: so nothing is lost by closing the window.
+AUTOSAVE_NAME = f"event{DRAFT_SUFFIX}"
+
 ROLE = "Organizer"
 
 TIE_BREAK_LABELS = {
@@ -118,6 +124,7 @@ class OrganizerWindow(QMainWindow):
         self.busy = False
         self.settings = load_settings()
         self.workspace: EventPaths | None = None
+        self._autosaved_to: Path | None = None
 
         # A remembered squadron and organizer name are offered as the
         # defaults, so a squadron running events regularly configures
@@ -200,6 +207,9 @@ class OrganizerWindow(QMainWindow):
         layout.addLayout(header)
         layout.addWidget(separator())
 
+        self.next_step_label = label("", "hint", wrap=True)
+        layout.addWidget(self.next_step_label)
+
         splitter = QSplitter(Qt.Vertical)
         self.tabs = QTabWidget()
         self.tabs.addTab(self._event_tab(), "1 \u00b7 Event")
@@ -207,6 +217,16 @@ class OrganizerWindow(QMainWindow):
         self.tabs.addTab(self._issue_tab(), "3 \u00b7 Issue invitation")
         self.tabs.addTab(self._close_tab(), "4 \u00b7 Close && publish")
         splitter.addWidget(self.tabs)
+
+        nav = QHBoxLayout()
+        self.back_button = button("\u2039  Back")
+        self.back_button.clicked.connect(lambda: self._step(-1))
+        self.next_button = button("Next  \u203a")
+        self.next_button.clicked.connect(lambda: self._step(1))
+        nav.addStretch(1)
+        nav.addWidget(self.back_button)
+        nav.addWidget(self.next_button)
+        layout.addLayout(nav)
 
         self.log = LogPane(rows=6)
         splitter.addWidget(self.log)
@@ -217,6 +237,35 @@ class OrganizerWindow(QMainWindow):
 
         self.statusBar().showMessage("Ready")
         self.log.write(f"EDSG organizer {read_version()} started.", "accent")
+
+    def _set_period(self, start: QDateTime, end: QDateTime) -> None:
+        """Apply a period, enabling both bounds."""
+        self.start_enabled.setChecked(True)
+        self.end_enabled.setChecked(True)
+        self.start_edit.setDateTime(start)
+        self.end_edit.setDateTime(end)
+        self._refresh_readiness()
+
+    def _period_whole_day(self) -> None:
+        day = self.start_edit.date()
+        self._set_period(
+            QDateTime(day, QTime(0, 0, 0)), QDateTime(day, QTime(23, 59, 59))
+        )
+
+    def _period_this_month(self) -> None:
+        day = self.start_edit.date()
+        first = QDate(day.year(), day.month(), 1)
+        last = QDate(day.year(), day.month(), first.daysInMonth())
+        self._set_period(
+            QDateTime(first, QTime(0, 0, 0)), QDateTime(last, QTime(23, 59, 59))
+        )
+
+    def _period_this_year(self) -> None:
+        year = self.start_edit.date().year()
+        self._set_period(
+            QDateTime(QDate(year, 1, 1), QTime(0, 0, 0)),
+            QDateTime(QDate(year, 12, 31), QTime(23, 59, 59)),
+        )
 
     def _event_tab(self) -> QWidget:
         tab = QWidget()
@@ -249,17 +298,32 @@ class OrganizerWindow(QMainWindow):
         row = QHBoxLayout()
         row.setSpacing(10)
 
+        # Defaults snap to day boundaries. Using "now" gave an arbitrary
+        # time of day, so an event meant to cover a whole first day
+        # silently excluded everything before the moment it was created.
+        today = QDate.currentDate()
+        start_default = QDateTime(today, QTime(0, 0, 0))
+        end_default = QDateTime(today.addDays(14), QTime(23, 59, 59))
+
         self.start_enabled = QCheckBox("Starts")
         self.start_enabled.setChecked(True)
-        self.start_edit = QDateTimeEdit(QDateTime.currentDateTimeUtc())
-        self.start_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.start_edit = QDateTimeEdit(start_default)
+        # Seconds are displayed because they are stored: showing HH:mm
+        # while keeping :36 underneath meant the window was not what the
+        # organizer was shown.
+        self.start_edit.setDisplayFormat("yyyy-MM-dd  HH:mm:ss")
         self.start_edit.setCalendarPopup(True)
+        self.start_edit.setToolTip(
+            "Click the date or time you want to change, then type or use "
+            "the arrow keys. Times are UTC."
+        )
 
         self.end_enabled = QCheckBox("Ends")
         self.end_enabled.setChecked(True)
-        self.end_edit = QDateTimeEdit(QDateTime.currentDateTimeUtc().addDays(14))
-        self.end_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.end_edit = QDateTimeEdit(end_default)
+        self.end_edit.setDisplayFormat("yyyy-MM-dd  HH:mm:ss")
         self.end_edit.setCalendarPopup(True)
+        self.end_edit.setToolTip(self.start_edit.toolTip())
 
         for check, edit in (
             (self.start_enabled, self.start_edit),
@@ -273,10 +337,38 @@ class OrganizerWindow(QMainWindow):
             row.addSpacing(20)
         row.addStretch(1)
         period_layout.addLayout(row)
+        shortcuts = QHBoxLayout()
+        shortcuts.setSpacing(6)
+        shortcuts.addWidget(label("Quick set", "hint"))
+        for text, tip, handler in (
+            (
+                "Whole day",
+                "00:00:00 to 23:59:59 on the start date",
+                self._period_whole_day,
+            ),
+            (
+                "This month",
+                "First to last day of the start month",
+                self._period_this_month,
+            ),
+            (
+                "This year",
+                "1 January to 31 December of the start year",
+                self._period_this_year,
+            ),
+        ):
+            widget = button(text)
+            widget.setToolTip(tip)
+            widget.clicked.connect(handler)
+            shortcuts.addWidget(widget)
+        shortcuts.addStretch(1)
+        period_layout.addLayout(shortcuts)
+
         period_layout.addWidget(
             label(
-                "Times are UTC, matching the journals. Untick a bound to "
-                "leave that end of the window open.",
+                "Times are UTC, matching the journals. Click the hour or "
+                "minute to edit it, or use a quick-set button. Untick a "
+                "bound to leave that end of the window open.",
                 "hint",
                 wrap=True,
             )
@@ -367,6 +459,14 @@ class OrganizerWindow(QMainWindow):
         remove = button("Remove", "danger")
         remove.clicked.connect(self._remove_criterion)
         row.addWidget(remove)
+        self.tiers_button = button("Goal tiers & rewards\u2026")
+        self.tiers_button.setToolTip(
+            "Optional: set a collective target with goal tiers, and reward "
+            "bands for the ranked commanders"
+        )
+        self.tiers_button.clicked.connect(self._edit_tiers)
+        row.addWidget(self.tiers_button)
+
         row.addStretch(1)
         up = button("Move up")
         up.clicked.connect(lambda: self._move(-1))
@@ -384,14 +484,33 @@ class OrganizerWindow(QMainWindow):
 
         identity_group = QGroupBox("Your signing identity")
         identity_layout = QVBoxLayout(identity_group)
+
+        fingerprint_row = QHBoxLayout()
         self.fingerprint_label = label("\u2014", "fingerprint")
-        identity_layout.addWidget(self.fingerprint_label)
+        fingerprint_row.addWidget(self.fingerprint_label)
+        self.copy_fingerprint_button = button("Copy")
+        self.copy_fingerprint_button.setToolTip("Copy the fingerprint to the clipboard")
+        self.copy_fingerprint_button.clicked.connect(self._copy_fingerprint)
+        fingerprint_row.addWidget(self.copy_fingerprint_button)
+        fingerprint_row.addStretch(1)
+        identity_layout.addLayout(fingerprint_row)
+
         identity_layout.addWidget(
             label(
                 "Publish this fingerprint somewhere your participants "
                 "already trust \u2014 your squadron Discord, for instance. "
                 "It is how they confirm an invitation really came from you. "
                 "EDSG cannot do that for them.",
+                "hint",
+                wrap=True,
+            )
+        )
+        identity_layout.addWidget(
+            label(
+                "It is a SHA-256 fingerprint of the Ed25519 public key EDSG "
+                "generated for you on first run, held in your settings "
+                "folder. The same key signs every invitation you issue, so "
+                "the fingerprint stays the same until you delete it.",
                 "hint",
                 wrap=True,
             )
@@ -406,6 +525,9 @@ class OrganizerWindow(QMainWindow):
 
         row = QHBoxLayout()
         self.issue_button = primary_button("Issue invitation\u2026")
+        self.issue_button.setToolTip(
+            "Freeze the event, sign it, and write the .edsgi to send to participants"
+        )
         self.issue_button.clicked.connect(self._issue)
         row.addWidget(self.issue_button)
         self.issued_label = label("", "hint")
@@ -458,6 +580,9 @@ class OrganizerWindow(QMainWindow):
             "Choose a submissions folder to preview the standings.", "hint"
         )
         self.refresh_preview_button = button("Refresh preview")
+        self.refresh_preview_button.setToolTip(
+            "Score the submissions folder again without closing the event"
+        )
         self.refresh_preview_button.clicked.connect(self._preview_standings)
         status_row.addWidget(self.standings_status, 1)
         status_row.addWidget(self.refresh_preview_button)
@@ -470,18 +595,36 @@ class OrganizerWindow(QMainWindow):
         )
         self.standings_tree.setRootIsDecorated(False)
         self.standings_tree.setAlternatingRowColors(True)
+        # Commander takes the slack. Leaving Points as the stretched last
+        # column pushed its right-aligned value hundreds of pixels from
+        # its own header, so the column read as empty.
+        header = self.standings_tree.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.Fixed)
+        header.setSectionResizeMode(3, QHeaderView.Fixed)
         self.standings_tree.setColumnWidth(0, 70)
-        self.standings_tree.setColumnWidth(1, 260)
         self.standings_tree.setColumnWidth(2, 140)
+        self.standings_tree.setColumnWidth(3, 130)
         results_layout.addWidget(self.standings_tree)
         layout.addWidget(results, 1)
 
         row = QHBoxLayout()
         self.close_button = primary_button("Close event && publish\u2026")
+        self.close_button.setToolTip(
+            "Rank the submissions and publish the reports. This cannot be undone."
+        )
         self.close_button.clicked.connect(self._close_event)
         self.regen_button = button("Regenerate reports\u2026")
+        self.regen_button.setToolTip(
+            "Rebuild the reports of a closed event from its submissions folder"
+        )
         self.regen_button.clicked.connect(self._regenerate)
         self.open_reports_button = button("Open report folder")
+        self.open_reports_button.setToolTip(
+            "Open the folder the standings were written to"
+        )
         self.open_reports_button.clicked.connect(self._open_reports)
         row.addWidget(self.close_button)
         row.addWidget(self.regen_button)
@@ -505,6 +648,48 @@ class OrganizerWindow(QMainWindow):
         )
 
     # -- form <-> model --------------------------------------------------
+
+    def _autosave(self) -> None:
+        """Write the working event into its own workspace folder.
+
+        The event used to live only in memory until the organizer chose
+        File > Save event draft, so closing the window lost the work.
+        Saving on every meaningful change means an event is always
+        recoverable, and File > Open event draft finds it where the rest
+        of the event's files already are.
+        """
+        if not self.event_def.name.strip():
+            return
+        try:
+            workspace = event_paths(self.event_def.name)
+            workspace.root.mkdir(parents=True, exist_ok=True)
+            target = workspace.root / AUTOSAVE_NAME
+            target.write_text(
+                pretty_text(self.event_def.to_dict()) + "\n", encoding="utf-8"
+            )
+        except OSError as exc:
+            # Autosave failing must never interrupt what the organizer
+            # is doing; the manual draft save reports its own errors.
+            self.log.write(f"Could not autosave the event: {exc}", "warn")
+            return
+        self._autosaved_to = target
+
+    def _step(self, offset: int) -> None:
+        """Move between tabs with the Back and Next buttons."""
+        target = self.tabs.currentIndex() + offset
+        if 0 <= target < self.tabs.count():
+            self.tabs.setCurrentIndex(target)
+
+    def _copy_fingerprint(self) -> None:
+        """Put the signing fingerprint on the clipboard."""
+        if self.identity is None:
+            return
+        clipboard = QApplication.clipboard()
+        if clipboard is None:
+            return
+        clipboard.setText(self.identity.fingerprint)
+        self.statusBar().showMessage("Fingerprint copied to the clipboard", 4000)
+        self.log.write("Fingerprint copied to the clipboard.", "muted")
 
     def _collect(self) -> None:
         self.event_def.name = self.name_field.text().strip()
@@ -536,16 +721,15 @@ class OrganizerWindow(QMainWindow):
         self.description_field.setPlainText(self.event_def.description)
 
         window = self.event_def.window
+        # Built from the naive UTC components rather than an epoch, which
+        # avoids the deprecated Qt.TimeSpec overload and keeps the widget
+        # showing exactly the UTC time that is stored.
         self.start_enabled.setChecked(window.start is not None)
         if window.start:
-            self.start_edit.setDateTime(
-                QDateTime.fromSecsSinceEpoch(int(window.start.timestamp()), Qt.UTC)
-            )
+            self.start_edit.setDateTime(_to_qt(window.start))
         self.end_enabled.setChecked(window.end is not None)
         if window.end:
-            self.end_edit.setDateTime(
-                QDateTime.fromSecsSinceEpoch(int(window.end.timestamp()), Qt.UTC)
-            )
+            self.end_edit.setDateTime(_to_qt(window.end))
 
         if self.event_def.eligibility is Eligibility.SQUADRON:
             self.squadron_radio.setChecked(True)
@@ -558,8 +742,34 @@ class OrganizerWindow(QMainWindow):
 
     # -- refresh ---------------------------------------------------------
 
+    #: What each state means and what the organizer does next.
+    STATE_GUIDANCE = {
+        EventState.DRAFT: (
+            "DRAFT \u2014 still being written. Nothing has been sent out.",
+            "Next: finish the criteria, then issue the invitation on tab 3.",
+        ),
+        EventState.OPEN: (
+            "OPEN \u2014 invitation issued, awaiting submissions.",
+            "Next: collect the .edsgs files participants send you into the "
+            "event's submissions folder, then close the event on tab 4.",
+        ),
+        EventState.CLOSED: (
+            "CLOSED \u2014 standings published. This cannot be undone.",
+            "Reports can still be regenerated from the submissions folder.",
+        ),
+    }
+
+    def _refresh_navigation(self) -> None:
+        """Enable Back and Next according to the tab in view."""
+        index = self.tabs.currentIndex()
+        self.back_button.setEnabled(index > 0)
+        self.next_button.setEnabled(index < self.tabs.count() - 1)
+
     def _refresh(self) -> None:
-        self.state_label.setText(f"Event state: {self.event_def.state.value.upper()}")
+        self._refresh_navigation()
+        state, guidance = self.STATE_GUIDANCE[self.event_def.state]
+        self.state_label.setText(state)
+        self.next_step_label.setText(guidance)
 
         if self.event_def.squadron:
             self.squadron_label.setText(f"Squadron: {self.event_def.squadron}")
@@ -621,6 +831,13 @@ class OrganizerWindow(QMainWindow):
                     else "Open to all commanders",
                 ),
                 ("Criteria", str(len(self.event_def.criteria))),
+                (
+                    "Goal",
+                    f"{self.event_def.tiers.target:,.0f} points across "
+                    f"{len(self.event_def.tiers.goal_tiers)} tier(s)"
+                    if self.event_def.tiers.enabled
+                    else "no goal tiers \u2014 plain leaderboard",
+                ),
                 ("Tie-break", TIE_BREAK_LABELS[self.event_def.tie_break]),
             ]
             rows = "".join(
@@ -645,6 +862,7 @@ class OrganizerWindow(QMainWindow):
             return
         self.event_def.criteria.append(criterion)
         self.log.write(f"Added criterion '{criterion.label}'.", "good")
+        self._autosave()
         self._refresh()
 
     def _edit_criterion(self) -> None:
@@ -657,6 +875,7 @@ class OrganizerWindow(QMainWindow):
             return
         self.event_def.criteria[self.event_def.criteria.index(current)] = updated
         self.log.write(f"Updated criterion '{updated.label}'.", "good")
+        self._autosave()
         self._refresh()
 
     def _duplicate_criterion(self) -> None:
@@ -685,6 +904,25 @@ class OrganizerWindow(QMainWindow):
             return
         self.event_def.criteria.remove(current)
         self.log.write(f"Removed criterion '{current.label}'.", "warn")
+        self._autosave()
+        self._refresh()
+
+    def _edit_tiers(self) -> None:
+        """Edit the goal tiers and reward bands."""
+        updated = edit_tiers(self, self.event_def.tiers)
+        if updated is None:
+            return
+        self.event_def.tiers = updated
+        if updated.enabled:
+            self.log.write(
+                f"Goal set: {updated.target:,.0f} points across "
+                f"{len(updated.goal_tiers)} tier(s), "
+                f"{len(updated.reward_bands)} reward band(s).",
+                "good",
+            )
+        else:
+            self.log.write("Goal tiers turned off.", "muted")
+        self._autosave()
         self._refresh()
 
     def _move(self, offset: int) -> None:
@@ -803,6 +1041,7 @@ class OrganizerWindow(QMainWindow):
         self.invitation_picker.set_path(written)
         self.issued_label.setText(f"Issued: {written.name}")
         self.workspace = workspace
+        self._autosave()
 
         # Point the close tab at the folders just created, so collecting
         # submissions and publishing need no further navigation.
@@ -943,6 +1182,9 @@ class OrganizerWindow(QMainWindow):
                 f"{len(report.rejected)} submission(s) rejected.",
                 f"Saved to {report_dir}",
             )
+            # Opened after the dialog is dismissed, so the file manager
+            # does not appear behind it.
+            open_path(report_dir)
 
         def failed(exc: BaseException) -> None:
             self._set_busy(False)
@@ -1115,6 +1357,15 @@ class OrganizerWindow(QMainWindow):
         """
         wait_for_workers()
         super().closeEvent(event)
+
+
+def _to_qt(moment: datetime) -> QDateTime:
+    """Return a QDateTime showing ``moment`` as its UTC wall time."""
+    utc = moment.astimezone(UTC)
+    return QDateTime(
+        QDate(utc.year, utc.month, utc.day),
+        QTime(utc.hour, utc.minute, utc.second),
+    )
 
 
 def _safe_stem(name: str) -> str:

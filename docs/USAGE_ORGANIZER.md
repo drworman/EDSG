@@ -26,8 +26,16 @@ event you run, so publish it once.
 of every report. Write the description for someone deciding whether to take
 part.
 
-**Period.** Times are UTC, because journals record UTC. Untick either bound to
-leave that end open — useful for "everything up to the deadline" events.
+**Period.** Times are UTC, because journals record UTC. New events default to
+`00:00:00` on the start date and `23:59:59` on the end date, so a period
+covers whole days.
+
+Click the hour, minute or second to change it — the calendar button only sets
+the date. The **quick-set** buttons cover the common cases: whole day, this
+month, this year.
+
+Untick either bound to leave that end open — useful for "everything up to the
+deadline" events.
 Journal events outside the window are ignored entirely, so a participant with
 five years of logs is scored only on the window.
 
@@ -81,6 +89,18 @@ in the reports; keep it short.
 The *Duplicate* button is the quickest way to build a set of similar criteria —
 one per ore, say — then edit each copy.
 
+**Check your names.** A misspelled system or station scores zero in silence,
+and once the invitation is signed there is no correcting it without reissuing
+and asking everyone to rescan. The criterion editor has a **Check names
+against Spansh** button for exactly this. It is advisory: Spansh does not know
+every name, and being offline says nothing about your spelling, so EDSG never
+blocks on it.
+
+**Optional: give the event a goal.** *Goal tiers & rewards* turns the event
+into something shaped like a Frontier community goal — a collective target
+broken into tiers, with reward bands ranking the commanders who contributed.
+See [GOALS.md](GOALS.md).
+
 ## 3 · Issue the invitation
 
 The *Readiness* panel lists anything blocking you. When it is clear, click
@@ -90,12 +110,10 @@ EDSG creates a workspace for the event beside the binary and offers to save
 the invitation inside it:
 
 ```
-EDSG-Organizer(.exe)
-Events/
-└── Summer Mining Drive/
-    ├── invitation/
-    ├── submissions/
-    └── standings/
+Documents/EDSG/Events/Summer Mining Drive/
+├── 1 - Invitation/
+├── 2 - Submissions/
+└── 3 - Standings/
 ```
 
 All three folders are created together, and the *Close & publish* tab is
@@ -105,6 +123,11 @@ invitation elsewhere if you prefer.
 Event names are sanitised for the filesystem — `Test Event #1` becomes
 `Test Event -1` — so a name that reads well in a report cannot produce a
 folder that will not create. `EDSG_HOME` overrides the workspace root.
+
+**Your work is saved as you go.** The event is written to `event.edsgevent`
+in its own folder whenever you change it, so closing the window loses
+nothing. Reopen it with File → Open event draft, or by loading the `.edsgi`
+on tab 4, which restores the whole event definition.
 
 Send participants:
 

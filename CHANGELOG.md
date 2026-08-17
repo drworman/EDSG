@@ -16,6 +16,119 @@ govern it: `SCHEMA_VERSION` in `core/models.py` for the structure of
 invitations and submissions, and `CANONICAL_FORM` in `core/canonical.py` for
 the encoding signatures are computed over.
 
+## [20260816]
+
+Everything below closes out feedback from external testing, plus the goal
+tier system. Document schema is unchanged at `SCHEMA_VERSION` 1 and
+signatures still use `edsg-canonical-json-1`, so invitations and
+submissions issued by the previous release still verify.
+
+### Added
+- **Goal tiers and reward bands.** An event can now carry a collective
+  target broken into up to five goal tiers, with up to five reward bands
+  ranking the commanders who contributed. The shape follows Frontier's own
+  community goals: everyone's points add into one total that climbs through
+  tiers, and each commander is paid by the best band they reach. Tiers can
+  be typed, split evenly from the target, or stepped in 20% increments from
+  whichever end you know. Rewards escalate by a multiplier per tier reached,
+  which keeps the configuration to ten inputs rather than a five-by-five
+  grid. See [docs/GOALS.md](docs/GOALS.md).
+- **Progress board in every report.** The HTML, PDF, Markdown and JSON
+  outputs all show the tier reached, a meter marked with each threshold,
+  how far the next tier is, and the reward band table with the points range
+  each band covers.
+- **Advisory name checking.** The criterion editor can look typed system
+  and station names up on Spansh. A misspelled filter scores zero in
+  silence and a signed invitation cannot be corrected afterwards, so it is
+  worth catching first. Purely advisory: no API key, never blocks saving,
+  and an unreachable Spansh is reported as "could not check" rather than as
+  a spelling problem.
+- **Commander picker.** A journal folder holding more than one account is
+  now a choice rather than a dead end. Elite writes every account on a
+  machine into the same folder, and the previous behaviour made EDSG
+  unusable for anyone in that position. EDSG never guesses: the Frontier ID
+  decides who a submission belongs to.
+- **Quick-set period buttons** — whole day, this month, this year — and the
+  event period now shows seconds, because it was storing them.
+- **Autosave.** The working event is written into its own workspace folder
+  whenever it changes, so closing the window no longer loses it.
+- **Back and Next buttons** on the organizer, alongside the tabs.
+- **Copy button** for the signing fingerprint, and a note in the interface
+  explaining what the fingerprint is and where it comes from.
+- Examples on the systems, stations and factions filter fields, and a
+  standing note that the filter options follow the metric above them.
+
+### Changed
+- **Standings are presented as commander cards** rather than one very wide
+  table. A column per criterion became unreadable past three or four
+  criteria and pushed the totals away from the names; a card keeps each
+  commander's rank, total and per-criterion breakdown together.
+- **Events are stored in the user's Documents folder** — `Documents/EDSG/
+  Events/` — rather than beside the binary. Writing next to the executable
+  fails outright in Program Files and breaks the signature of a notarised
+  macOS bundle. An `EDSG-portable.txt` marker beside a frozen binary
+  restores the old behaviour for memory-stick use, and `EDSG_HOME` still
+  overrides both.
+- Event subfolders are numbered `1 - Invitation`, `2 - Submissions` and
+  `3 - Standings`, so they list in the order they are used. Alphabetically,
+  "standings" previously sorted between the other two.
+- Participant submissions are written to `Documents/EDSG/Submissions`
+  rather than inside Frontier's Saved Games tree.
+- The organizer header now says what state the event is in and what to do
+  next, which the previous `DRAFT`/`OPEN`/`CLOSED` label did not.
+- The standings folder opens automatically once reports are published.
+
+### Fixed
+- **The event period defaulted to the current time of day, silently
+  excluding part of the first day.** An event created at 10:39 and meant to
+  cover a whole year began at `2026-01-01T10:39:36`, so anything logged that
+  morning scored nothing. Periods now default to `00:00:00` and `23:59:59`.
+- The organizer's Points column was the stretched last column, so its
+  right-aligned value sat hundreds of pixels from its own header and the
+  column read as empty. Commander now takes the slack.
+
+
+### Added
+- **Commander picker.** A journal folder holding more than one account is
+  now a choice rather than a dead end. Elite writes every account on a
+  machine into the same folder, and the previous behaviour made EDSG
+  unusable for anyone in that position. EDSG never guesses: the Frontier ID
+  decides who a submission belongs to.
+- **Quick-set period buttons** — whole day, this month, this year — and the
+  event period now shows seconds, because it was storing them.
+- **Autosave.** The working event is written into its own workspace folder
+  whenever it changes, so closing the window no longer loses it.
+- **Back and Next buttons** on the organizer, alongside the tabs.
+- **Copy button** for the signing fingerprint, and a note in the interface
+  explaining what the fingerprint is and where it comes from.
+- Examples on the systems, stations and factions filter fields, and a
+  standing note that the filter options follow the metric above them.
+
+### Changed
+- **Events are stored in the user's Documents folder** — `Documents/EDSG/
+  Events/` — rather than beside the binary. Writing next to the executable
+  fails outright in Program Files and breaks the signature of a notarised
+  macOS bundle. An `EDSG-portable.txt` marker beside a frozen binary
+  restores the old behaviour for memory-stick use, and `EDSG_HOME` still
+  overrides both.
+- Event subfolders are numbered `1 - Invitation`, `2 - Submissions` and
+  `3 - Standings`, so they list in the order they are used. Alphabetically,
+  "standings" previously sorted between the other two.
+- Participant submissions are written to `Documents/EDSG/Submissions`
+  rather than inside Frontier's Saved Games tree.
+- The organizer header now says what state the event is in and what to do
+  next, which the previous `DRAFT`/`OPEN`/`CLOSED` label did not.
+- The standings folder opens automatically once reports are published.
+
+### Fixed
+- **The event period defaulted to the current time of day, silently
+  excluding part of the first day.** An event created at 10:39 and meant to
+  cover a whole year began at `2026-01-01T10:39:36`, so anything logged that
+  morning scored nothing. Periods now default to `00:00:00` and `23:59:59`.
+- The organizer's Points column was the stretched last column, so its
+  right-aligned value sat hundreds of pixels from its own header and the
+  column read as empty. Commander now takes the slack.
+
 ## [20260811]
 
 ### Added
@@ -206,6 +319,7 @@ Document schema `SCHEMA_VERSION` 1, signing encoding
   schema and covered by synthetic tests, having not appeared in the journal
   corpus used during development.
 
-[Unreleased]: https://github.com/drworman/EDSG/compare/20260811...HEAD
+[Unreleased]: https://github.com/drworman/EDSG/compare/20260816...HEAD
+[20260816]: https://github.com/drworman/EDSG/compare/20260811...20260816
 [20260811]: https://github.com/drworman/EDSG/compare/20260810...20260811
 [20260810]: https://github.com/drworman/EDSG/releases/tag/20260810

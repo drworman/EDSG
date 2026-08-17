@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QMainWindow,
     QProgressBar,
     QScrollArea,
@@ -33,14 +34,23 @@ from PySide6.QtWidgets import (
 from edsg.core.criteria import Measure
 from edsg.core.crypto import Identity, load_or_create_identity
 from edsg.core.errors import EDSGError
-from edsg.core.journal import CommanderIdentity, resolve_commander
+from edsg.core.journal import (
+    CommanderIdentity,
+    MultipleCommandersError,
+    resolve_commander,
+)
 from edsg.core.models import (
     INVITATION_SUFFIX,
     SUBMISSION_SUFFIX,
     Eligibility,
     Submission,
 )
-from edsg.core.paths import ROLE_PARTICIPANT, find_journal_dir, set_role
+from edsg.core.paths import (
+    ROLE_PARTICIPANT,
+    app_root,
+    find_journal_dir,
+    set_role,
+)
 from edsg.core.settings import load_settings
 from edsg.core.workflow import Invitation, load_invitation, participate
 from edsg.gui.about import SupportStrip
@@ -74,6 +84,7 @@ class ParticipantWindow(QMainWindow):
         self.invitation: Invitation | None = None
         self.journal_dir: Path | None = None
         self.commander: CommanderIdentity | None = None
+        self.commander_fid: str | None = None
         self.identity: Identity | None = None
         self.submission: Submission | None = None
         self.submission_path: Path | None = None
@@ -178,6 +189,10 @@ class ParticipantWindow(QMainWindow):
         self.invitation_picker = PathPicker(
             "The .edsgi file your organizer sent you", "Open\u2026"
         )
+        self.invitation_picker.button.setToolTip(
+            "Choose the invitation file. EDSG checks its signature before "
+            "showing you anything."
+        )
         self.invitation_picker.button.clicked.connect(self._open_invitation)
         layout.addWidget(self.invitation_picker)
         self.event_pane = InfoPane(rows=9)
@@ -189,6 +204,10 @@ class ParticipantWindow(QMainWindow):
         group = QGroupBox("Step 2 \u00b7 Point EDSG at your journal folder")
         layout = QVBoxLayout(group)
         self.journal_picker = PathPicker("Your Elite Dangerous journal folder")
+        self.journal_picker.button.setToolTip(
+            "The folder holding your Journal.*.log files. EDSG usually finds "
+            "it by itself, including Steam Proton and Wine prefixes."
+        )
         self.journal_picker.button.clicked.connect(self._pick_journals)
         layout.addWidget(self.journal_picker)
         self.commander_label = label("No journal folder selected yet.", "hint")
@@ -211,6 +230,10 @@ class ParticipantWindow(QMainWindow):
 
         row = QHBoxLayout()
         self.scan_button = primary_button("Scan my journals")
+        self.scan_button.setToolTip(
+            "Read your journals and total up only what this event measures. "
+            "Nothing leaves this computer."
+        )
         self.scan_button.clicked.connect(self._scan)
         row.addWidget(self.scan_button)
         self.progress = QProgressBar()
@@ -242,11 +265,15 @@ class ParticipantWindow(QMainWindow):
         group = QGroupBox("Step 4 \u00b7 Send it to your organizer")
         layout = QHBoxLayout(group)
         self.save_button = primary_button("Save submission\u2026")
+        self.save_button.setToolTip(
+            "Save a copy of your signed submission to send to the organizer"
+        )
         self.save_button.clicked.connect(self._save_as)
         self.reveal_button = QWidget()
         from edsg.gui.widgets import button as make_button
 
         self.reveal_button = make_button("Open containing folder")
+        self.reveal_button.setToolTip("Open the folder your submission was saved into")
         self.reveal_button.clicked.connect(self._reveal)
         layout.addWidget(self.save_button)
         layout.addWidget(self.reveal_button)
@@ -333,6 +360,18 @@ class ParticipantWindow(QMainWindow):
             f'<span class="k">\u2014 {item.describe()}</span></li>'
             for item in event.criteria
         )
+
+        goal = ""
+        if event.tiers.enabled and event.tiers.target > 0:
+            plan = event.tiers
+            bands = ", ".join(band.label for band in plan.reward_bands)
+            goal = (
+                f'<p class="k">This is a squadron goal: everyone\u2019s '
+                f"points add toward <b>{plan.target:,.0f}</b>, across "
+                f"{len(plan.goal_tiers)} tier(s)."
+                + (f" Reward tiers: {bands}." if bands else "")
+                + "</p>"
+            )
         description = (
             f'<p class="k">{event.description}</p>' if event.description else ""
         )
@@ -343,6 +382,7 @@ class ParticipantWindow(QMainWindow):
             f"{self.invitation.signer_fingerprint}</span><br/>"
             f"Check that fingerprint against the one your organizer "
             f"published before you take part.</p>"
+            f"{goal}"
             f'<p class="k">Scored on:</p><ul>{criteria}</ul>'
         )
 
@@ -358,10 +398,58 @@ class ParticipantWindow(QMainWindow):
         if directory:
             self._set_journal_dir(Path(directory))
 
+    def _choose_commander(
+        self, candidates: list[CommanderIdentity]
+    ) -> CommanderIdentity | None:
+        """Ask which commander to scan for.
+
+        Elite writes every account on a machine into one folder, so this
+        is a normal situation. EDSG must not guess: the Frontier ID is
+        what the submission is attributed to.
+        """
+        labels = [f"CMDR {item.name}  ({item.fid})" for item in candidates]
+        choice, accepted = QInputDialog.getItem(
+            self,
+            "Which commander?",
+            "This folder holds journals for more than one commander.\n"
+            "Choose the one you are taking part as:",
+            labels,
+            0,
+            False,
+        )
+        if not accepted:
+            return None
+        return candidates[labels.index(choice)]
+
     def _set_journal_dir(self, directory: Path, quiet: bool = False) -> None:
         self.journal_picker.set_path(directory)
         try:
-            commander = resolve_commander(directory)
+            commander = resolve_commander(directory, self.commander_fid)
+        except MultipleCommandersError as exc:
+            # Auto-detection at start-up must not throw a dialog at
+            # someone who has not asked for anything yet.
+            if quiet:
+                self.journal_dir = None
+                self.commander = None
+                self.commander_label.setText(
+                    f"{len(exc.commanders)} commanders found here — choose "
+                    f"your journal folder to pick one."
+                )
+                self.commander_label.setProperty("role", "warn")
+                self._restyle(self.commander_label)
+                self._refresh()
+                return
+            chosen = self._choose_commander(exc.commanders)
+            if chosen is None:
+                self.journal_dir = None
+                self.commander = None
+                self.commander_label.setText("No commander chosen.")
+                self.commander_label.setProperty("role", "warn")
+                self._restyle(self.commander_label)
+                self._refresh()
+                return
+            self.commander_fid = chosen.fid
+            commander = chosen
         except EDSGError as exc:
             self.journal_dir = None
             self.commander = None
@@ -398,7 +486,11 @@ class ParticipantWindow(QMainWindow):
         invitation = self.invitation
         journal_dir = self.journal_dir
         identity = self.identity
-        destination = journal_dir.parent / "EDSG submissions"
+        chosen_fid = self.commander_fid
+        # Submissions belong with the user's own documents, beside the
+        # organizer's event folders, not inside Frontier's Saved Games
+        # tree where the journals happen to live.
+        destination = app_root() / "Submissions"
 
         self._set_busy(True, "Reading journals\u2026")
         self.results_tree.clear()
@@ -413,6 +505,7 @@ class ParticipantWindow(QMainWindow):
                 identity,
                 destination,
                 progress=lambda count, phase: report((count, phase)),
+                commander_fid=chosen_fid,
             )
 
         def progressed(payload) -> None:

@@ -151,6 +151,7 @@ def participate(
     identity: Identity,
     destination: Path,
     progress: ProgressCallback | None = None,
+    commander_fid: str | None = None,
 ) -> tuple[Path, Submission, MembershipResult]:
     """Scan a participant's journals and write their signed submission.
 
@@ -159,7 +160,7 @@ def participate(
     more useful than silently refusing, and lets a participant show they
     followed the process when a squadron check goes wrong.
     """
-    commander: CommanderIdentity = resolve_commander(journal_dir)
+    commander: CommanderIdentity = resolve_commander(journal_dir, commander_fid)
 
     outcome = scan_journals(
         journal_dir,

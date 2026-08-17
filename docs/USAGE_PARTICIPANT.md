@@ -61,8 +61,7 @@ If a criterion has a **cap**, you may see something like `1,500 t (of 1,963)` �
 you mined more, but only the capped amount converts to points. That is the
 organizer's rule, not a bug.
 
-Your submission is saved automatically to an `EDSG submissions` folder next to
-your journal folder.
+Your submission is saved automatically to `Documents/EDSG/Submissions`.
 
 ## 4 · Send it in
 
@@ -126,9 +125,10 @@ some chat clients mangle attachments. Ask for it again, ideally zipped.
 **"No commander could be identified in that directory."** Wrong folder, or no
 `Journal.*.log` files in it.
 
-**"That directory contains journals for more than one commander."** Two
-accounts share the folder. EDSG will not guess which is yours; point it at a
-folder with only your journals.
+**"This folder holds journals for more than one commander."** Normal if you
+have more than one Elite account on this machine — the game writes them all
+to the same place. EDSG asks which one you are taking part as rather than
+guessing, because your Frontier ID is what the submission is attributed to.
 
 **"You are not eligible for this event."** The event is squadron-restricted and
 your journals do not show current membership. The message says why. A common

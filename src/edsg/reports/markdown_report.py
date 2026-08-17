@@ -63,6 +63,67 @@ def build_markdown(report: StandingsReport, style: ReportStyle | None = None) ->
         )
     lines.append("")
 
+    progress = report.progress()
+    if progress is not None:
+        plan = progress.plan
+        lines.append("## Goal progress")
+        lines.append("")
+        filled = round(progress.fraction * 20)
+        lines.append(
+            f"**{progress.tier_text}** \u2014 `"
+            + "\u2588" * filled
+            + "\u2591" * (20 - filled)
+            + f"` {progress.fraction * 100:.2f}%"
+        )
+        lines.append("")
+        lines.append(
+            f"**{progress.total:,.0f}** of {plan.target:,.0f} points from "
+            f"{progress.participants} contributor(s)."
+        )
+        if progress.next_tier is not None:
+            lines.append("")
+            lines.append(
+                f"{progress.to_next_tier:,.0f} more points to reach "
+                f"{progress.next_tier.label}."
+            )
+        elif plan.goal_tiers:
+            lines.append("")
+            lines.append("Every goal tier reached.")
+        lines.append("")
+
+        lines.append("| Tier | Threshold | Reached |")
+        lines.append("|---|---:|:---:|")
+        for index, tier in enumerate(plan.goal_tiers, start=1):
+            mark = "yes" if index <= progress.tiers_reached else "\u2014"
+            lines.append(f"| {_escape(tier.label)} | {tier.threshold:,.0f} | {mark} |")
+        lines.append("")
+
+        lines.append("## Reward tiers")
+        lines.append("")
+        if progress.multiplier != 1.0:
+            lines.append(
+                f"_Rewards paid at \u00d7{progress.multiplier:g} for "
+                f"{progress.tier_text}._"
+            )
+            lines.append("")
+        lines.append("| Reward tier | CMDRs | Points | Reward each |")
+        lines.append("|---|---:|---:|---:|")
+        for award in progress.awards:
+            payout = (
+                f"{award.payout:,.0f} {plan.currency}" if award.payout else "\u2014"
+            )
+            lines.append(
+                f"| {_escape(award.band.label)} | {award.count} "
+                f"| {_escape(award.range_text())} | {payout} |"
+            )
+        lines.append("")
+        lines.append(
+            "_Each commander is paid by the highest band they reach. "
+            "Rewards are worked out by EDSG and paid in game by the "
+            "organizer._"
+        )
+        lines.append("")
+
     lines.append("## Standings")
     lines.append("")
     if not report.standings:

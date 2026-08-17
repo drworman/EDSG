@@ -20,10 +20,12 @@ src/edsg/
 │   ├── location.py       Tracks position; resolves MarketID to a station
 │   ├── metrics.py        Single-pass scoring engine
 │   ├── models.py         Event, invitation and submission documents
+│   ├── namecheck.py      Advisory system and station lookups via Spansh
 │   ├── palettes.py       Theme colours, with derived, contrast-checked tones
 │   ├── paths.py          Per-role config dirs, journal discovery, workspace
 │   ├── settings.py       Appearance and branding, shared by both binaries
 │   ├── squadron.py       Membership reconciliation from journal evidence
+│   ├── tiers.py          Goal tiers, reward bands and progress
 │   ├── standings.py      Verification, ranking, tie-breaks
 │   └── workflow.py       issue → participate → close
 │
@@ -39,6 +41,7 @@ src/edsg/
     ├── about.py          About dialog and the funding links
     ├── menus.py          The menu bar shared by both windows
     ├── preferences.py    Theme, custom colours and squadron branding
+    ├── tier_dialog.py    Goal tiers, reward bands and escalation
     ├── theme.py          Stylesheet, driven by core.palettes
     ├── widgets.py        Shared widgets and the background worker
     ├── criterion_dialog.py
@@ -124,6 +127,36 @@ The count travels into the submission so an organizer can see it.
 Unknown event types are simply carried through — Frontier adds them with every
 update, and the catch-all `event_count` metric can score them by name without a
 new EDSG release.
+
+## Two kinds of tier
+
+`core/tiers.py` keeps two ideas apart that are easy to conflate, because
+Frontier's community goals combine both.
+
+*Goal tiers* are collective: every participant's points add into one total,
+and that total climbs through thresholds. *Reward bands* are individual: the
+ranked field is sliced, with a fixed-count band at the top and percentile
+bands below.
+
+Bands fill from the top down and each commander lands in exactly one — the
+best they qualify for. That is what makes Frontier's tables read the way they
+do, with `Top 10 CMDRs` showing a *higher* contribution range than the
+`Top 25%` row beneath it rather than being contained by it.
+
+Escalation is a multiplier per goal tier rather than a payout per
+band-and-tier pair. Both describe the same matrix; one takes ten inputs from
+an organizer and the other twenty-five.
+
+## Talking to the network
+
+`core/namecheck.py` is the only module that makes a network request, and it
+is advisory by construction. Every failure path — no network, a timeout, a
+rate limit, an unparsable reply — returns `Verdict.UNAVAILABLE`, which is
+explicitly *not* a problem: being offline says nothing about whether a name
+is spelled correctly.
+
+Nothing in scoring, signing or report generation consults it. EDSG works
+completely offline, and that must stay true.
 
 ## Qt object ownership
 

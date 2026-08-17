@@ -27,6 +27,7 @@ from edsg.core.criteria import Criterion
 from edsg.core.errors import CriteriaError, DocumentError
 from edsg.core.journal import parse_timestamp
 from edsg.core.squadron import SquadronRef
+from edsg.core.tiers import TierPlan
 
 DOC_TYPE_INVITATION = "edsg.invitation"
 DOC_TYPE_SUBMISSION = "edsg.submission"
@@ -129,6 +130,7 @@ class EventDefinition:
     eligibility: Eligibility = Eligibility.OPEN
     squadron: SquadronRef | None = None
     criteria: list[Criterion] = field(default_factory=list)
+    tiers: TierPlan = field(default_factory=TierPlan)
     tie_break: TieBreak = TieBreak.EARLIEST_SUBMISSION
     state: EventState = EventState.DRAFT
     created_at: str = field(
@@ -150,6 +152,7 @@ class EventDefinition:
                 "This event is restricted to a squadron, but no squadron "
                 "has been identified. Scan your own journals to detect it."
             )
+        problems.extend(self.tiers.validate())
         labels: dict[str, int] = {}
         for criterion in self.criteria:
             problems.extend(criterion.validate())
@@ -175,6 +178,7 @@ class EventDefinition:
             "eligibility": self.eligibility.value,
             "squadron": self.squadron.to_dict() if self.squadron else None,
             "criteria": [item.to_dict() for item in self.criteria],
+            "tiers": self.tiers.to_dict(),
             "tie_break": self.tie_break.value,
             "state": self.state.value,
             "created_at": self.created_at,
@@ -213,6 +217,7 @@ class EventDefinition:
             eligibility=eligibility,
             squadron=(SquadronRef.from_dict(squadron_data) if squadron_data else None),
             criteria=[Criterion.from_dict(item) for item in criteria_data],
+            tiers=TierPlan.from_dict(data.get("tiers")),
             tie_break=tie_break,
             state=state,
             created_at=str(data.get("created_at", "")),

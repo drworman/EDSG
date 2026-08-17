@@ -22,6 +22,7 @@ from edsg.core.models import (
     EventDefinition,
     Submission,
 )
+from edsg.core.tiers import ProgressReport, build_progress
 
 
 @dataclass
@@ -84,12 +85,29 @@ class StandingsReport:
     def participant_count(self) -> int:
         return len(self.standings)
 
+    @property
+    def total_points(self) -> float:
+        """Return the combined score of every ranked commander.
+
+        This is what a tiered event measures its collective progress
+        against: one number the whole field pushes upward.
+        """
+        return round(sum(item.total_points for item in self.standings), 4)
+
+    def progress(self) -> ProgressReport | None:
+        """Return tier progress, or ``None`` when the event has no plan."""
+        if not self.event.tiers.enabled:
+            return None
+        return build_progress(self.event.tiers, self.standings)
+
     def criterion_labels(self) -> list[str]:
         return [criterion.label for criterion in self.event.criteria]
 
     def to_dict(self) -> dict[str, Any]:
+        progress = self.progress()
         return {
             "event": self.event.to_dict(),
+            "progress": progress.to_dict() if progress else None,
             "generated_at": self.generated_at,
             "generator_version": self.generator_version,
             "participant_count": self.participant_count,

@@ -107,18 +107,25 @@ stop a report generating.
 Issuing an invitation creates a workspace beside the binary:
 
 ```
-EDSG-Organizer(.exe)
-Events/
-└── Summer Mining Drive/
-    ├── invitation/     the .edsgi you send out
-    ├── submissions/    put the .edsgs files you receive here
-    └── standings/      reports are written here
+Documents/EDSG/
+└── Events/
+    └── Summer Mining Drive/
+        ├── 1 - Invitation/    the .edsgi you send out
+        ├── 2 - Submissions/   put the .edsgs files you receive here
+        └── 3 - Standings/     reports are written here
 ```
 
-The organizer binary treats its own folder as the root, so an executable on a
-memory stick or in a synced folder carries its events with it. Running from
-source uses the current working directory instead, since a source tree is not
-where anyone wants their event data. `EDSG_HOME` overrides both.
+Events are your documents, so they live in your Documents folder. Writing
+beside the executable is not a safe default: a binary in Program Files cannot
+write to its own folder, and writing inside a signed macOS `.app` bundle
+breaks its signature.
+
+The subfolders are numbered so they list in the order you use them —
+alphabetically, "standings" would sort between the other two.
+
+Two escapes exist. Setting `EDSG_HOME` points the workspace anywhere. Dropping
+an empty file named `EDSG-portable.txt` beside a frozen binary keeps events on
+the same drive, which is what you want running EDSG from a memory stick.
 
 Event names are sanitised for the filesystem — `Test Event #1` becomes
 `Test Event -1`, and Windows device names such as `CON` are prefixed — so a

@@ -30,8 +30,18 @@ ROLES = (ROLE_ORGANIZER, ROLE_PARTICIPANT)
 #: each GUI entry point sets it before anything reads configuration.
 _active_role: str = ROLE_ORGANIZER
 
-#: Folder created beside the binary to hold every event's working files.
+#: Folder holding every event's working files, inside the workspace root.
 EVENTS_DIRNAME = "Events"
+
+#: Dropped beside a frozen binary to keep the workspace on the same drive.
+PORTABLE_MARKER = "EDSG-portable.txt"
+
+#: The three folders making up an event workspace. Numbered so they sort
+#: in the order they are used: alphabetically "standings" would otherwise
+#: land between "invitation" and "submissions".
+INVITATION_DIRNAME = "1 - Invitation"
+SUBMISSIONS_DIRNAME = "2 - Submissions"
+STANDINGS_DIRNAME = "3 - Standings"
 
 
 def _windows_appdata() -> Path:
@@ -112,24 +122,102 @@ def keys_dir(role: str | None = None) -> Path:
     return config_dir(role) / "keys"
 
 
+def _windows_documents() -> Path:
+    """Return the Documents folder, honouring a redirected location.
+
+    Windows lets a user (or OneDrive) move Documents elsewhere, and the
+    real location lives in the registry. Assuming ``~/Documents`` puts
+    files somewhere the user does not look.
+    """
+    try:
+        # Reached through importlib and getattr because the module does
+        # not exist off Windows: a direct import breaks every other
+        # platform, and direct attribute access fails type-checking
+        # anywhere the module is absent.
+        import importlib
+
+        winreg = importlib.import_module("winreg")
+        key = (
+            r"Software\Microsoft\Windows\CurrentVersion"
+            r"\Explorer\User Shell Folders"
+        )
+        opener = winreg.OpenKey
+        query = winreg.QueryValueEx
+        with opener(winreg.HKEY_CURRENT_USER, key) as handle:
+            raw, _ = query(handle, "Personal")
+        expanded = os.path.expandvars(str(raw))
+        if expanded:
+            return Path(expanded)
+    except (ImportError, OSError, ValueError, AttributeError):
+        pass
+    return Path.home() / "Documents"
+
+
+def _linux_documents() -> Path:
+    """Return the XDG documents directory, or ``~/Documents``."""
+    configured = os.environ.get("XDG_DOCUMENTS_DIR")
+    if configured:
+        return Path(os.path.expandvars(configured)).expanduser()
+
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(xdg).expanduser() if xdg else Path.home() / ".config"
+    user_dirs = base / "user-dirs.dirs"
+    try:
+        for line in user_dirs.read_text(encoding="utf-8").splitlines():
+            if not line.startswith("XDG_DOCUMENTS_DIR"):
+                continue
+            value = line.split("=", 1)[1].strip().strip('"')
+            return Path(os.path.expandvars(value)).expanduser()
+    except (OSError, IndexError):
+        pass
+    return Path.home() / "Documents"
+
+
+def documents_dir() -> Path:
+    """Return the user's Documents folder for this platform."""
+    if sys.platform == "win32":
+        return _windows_documents()
+    if sys.platform == "darwin":
+        return Path.home() / "Documents"
+    return _linux_documents()
+
+
+def is_portable() -> bool:
+    """Return whether a portable marker sits beside the binary.
+
+    Dropping an empty ``EDSG-portable.txt`` next to the executable keeps
+    events on the same drive, which is what someone running EDSG from a
+    memory stick wants.
+    """
+    if not getattr(sys, "frozen", False):
+        return False
+    marker = Path(sys.executable).resolve().parent / PORTABLE_MARKER
+    try:
+        return marker.is_file()
+    except OSError:
+        return False
+
+
 def app_root() -> Path:
     """Return the directory EDSG treats as its workspace root.
 
-    For a downloaded binary this is the folder the binary sits in, so an
-    organizer can keep the executable and its events together on a stick
-    or in a synced folder and have everything travel as one unit. Running
-    from source it is the current working directory instead, because the
-    source tree is not where anyone wants their event data.
+    Events are the user's own documents, so they belong in Documents.
+    Writing beside the executable is not safe as a default: on Windows a
+    binary in Program Files cannot write to its own folder, and on macOS
+    writing inside a signed ``.app`` bundle breaks its signature.
 
-    ``EDSG_HOME`` overrides both.
+    Two escapes exist. ``EDSG_HOME`` points the workspace anywhere, and
+    an ``EDSG-portable.txt`` marker beside a frozen binary keeps events
+    on the same drive for stick use.
     """
     override = os.environ.get("EDSG_HOME")
     if override:
         return Path(override).expanduser()
 
-    if getattr(sys, "frozen", False):
+    if is_portable():
         return Path(sys.executable).resolve().parent
-    return Path.cwd()
+
+    return documents_dir() / APP_NAME
 
 
 def events_root() -> Path:
@@ -193,9 +281,9 @@ def event_paths(event_name: str) -> EventPaths:
     root = events_root() / safe_folder_name(event_name)
     return EventPaths(
         root=root,
-        invitation=root / "invitation",
-        submissions=root / "submissions",
-        standings=root / "standings",
+        invitation=root / INVITATION_DIRNAME,
+        submissions=root / SUBMISSIONS_DIRNAME,
+        standings=root / STANDINGS_DIRNAME,
     )
 
 
@@ -277,19 +365,25 @@ def find_journal_dir() -> Path | None:
 __all__ = [
     "APP_NAME",
     "EVENTS_DIRNAME",
+    "INVITATION_DIRNAME",
+    "PORTABLE_MARKER",
     "ROLES",
     "ROLE_ORGANIZER",
     "ROLE_PARTICIPANT",
+    "STANDINGS_DIRNAME",
+    "SUBMISSIONS_DIRNAME",
     "EventPaths",
     "active_role",
     "app_root",
     "config_dir",
     "config_root",
     "default_journal_dirs",
+    "documents_dir",
     "ensure_config_dir",
     "event_paths",
     "events_root",
     "find_journal_dir",
+    "is_portable",
     "keys_dir",
     "safe_folder_name",
     "set_role",

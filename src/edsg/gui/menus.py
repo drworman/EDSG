@@ -112,7 +112,13 @@ def build_menus(
     owned.append(help_menu)
     bar.addMenu(help_menu)
     help_menu.addAction(
-        _action(window, "&Documentation", lambda: open_url(WIKI_URL, window), "F1")
+        _action(
+            window,
+            "&Documentation",
+            lambda: open_url(WIKI_URL, window),
+            "F1",
+            tip="Open the EDSG documentation in your browser",
+        )
     )
     help_menu.addAction(
         _action(window, "Project on &GitHub", lambda: open_url(PROJECT_URL, window))
@@ -126,6 +132,7 @@ def build_menus(
     help_menu.addSeparator()
 
     support_menu = QMenu("&Support EDSG development", window)
+    support_menu.setStatusTip("EDSG is free; these help keep it maintained")
     owned.append(support_menu)
     help_menu.addMenu(support_menu)
     for link in funding_links():
@@ -135,7 +142,12 @@ def build_menus(
 
     help_menu.addSeparator()
     help_menu.addAction(
-        _action(window, "&About EDSG", lambda: AboutDialog(window, role).exec())
+        _action(
+            window,
+            "&About EDSG",
+            lambda: AboutDialog(window, role).exec(),
+            tip="Version, licence and project links",
+        )
     )
 
 

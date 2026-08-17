@@ -106,6 +106,13 @@ no_implicit_optional = true
 module = ["reportlab.*"]
 ignore_missing_imports = true
 
+# `winreg` exists only on Windows, so checking on Linux reports every
+# call into it as a missing attribute. The block that uses it is guarded
+# by a platform check and a try/except at runtime.
+[[tool.mypy.overrides]]
+module = ["winreg"]
+ignore_missing_imports = true
+
 [tool.coverage.run]
 source = ["src/edsg"]
 omit = ["*/gui/*"]

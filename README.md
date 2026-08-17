@@ -22,6 +22,9 @@ Define criteria · Issue a signed invitation · Collect submissions · Publish s
 <ins>Scored activities</ins></br>
 Combat · Trade · Mining · Exploration · Exobiology · Missions · PowerPlay · Colonisation · any journal event
 
+<ins>Or run it as a community goal</ins></br>
+Collective target · up to 5 goal tiers · reward bands · escalating payouts
+
 <ins>Two builds, one for each side</ins></br>
 Organizer · Participant — Windows, macOS and Linux
 
@@ -108,10 +111,14 @@ Prefer to build it yourself? See [docs/BUILDING.md](docs/BUILDING.md).
    Send it to your participants along with your **signing fingerprint**, shown
    on that tab, so they can confirm it came from you.
 4. **Close & publish** — drop the `.edsgs` files you receive into the
-   `submissions` folder. The standings preview updates as soon as you point
-   EDSG at the folder, so you can check the results and spot a rejected
-   submission *before* closing. Closing is permanent; reports can be
-   regenerated at any time as long as you keep that folder.
+   `2 - Submissions` folder. The standings preview updates as soon as you
+   point EDSG at the folder, so you can check the results and spot a
+   rejected submission *before* closing. Closing is permanent; reports can
+   be regenerated at any time as long as you keep that folder.
+
+Optionally, give the event a **goal**: a collective target broken into tiers,
+with reward bands for the commanders who contributed, in the same shape as
+Frontier's community goals. See [docs/GOALS.md](docs/GOALS.md).
 
 ### Participants
 
@@ -203,6 +210,7 @@ that an organizer needs to notice something implausible.
 | [Architecture](docs/ARCHITECTURE.md) | How the code is laid out |
 | [Building](docs/BUILDING.md) | Building binaries yourself |
 | [Licensing](docs/LICENSING.md) | MIT, and the Qt LGPL obligations |
+| [Goal tiers and rewards](docs/GOALS.md) | Running an event as a community goal |
 | [Themes and branding](docs/THEMES.md) | Palettes, custom colours, squadron identity on reports |
 | [Contributing](CONTRIBUTING.md) | Conventional Commits, versioning, tests |
 

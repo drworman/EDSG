@@ -110,3 +110,21 @@ def simple_event(window):
 @pytest.fixture
 def squadron():
     return SquadronRef(squadron_id=110393, name="TEST SQUADRON")
+
+
+@pytest.fixture(scope="session")
+def qt_app():
+    """A single QApplication for the whole session.
+
+    Qt permits only one, and creating a second in the same process
+    aborts, so every GUI test shares this.
+    """
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+
+    from edsg.gui.theme import apply_theme
+
+    existing = QApplication.instance()
+    application = existing or QApplication([])
+    apply_theme(application)
+    return application

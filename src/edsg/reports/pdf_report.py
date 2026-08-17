@@ -187,6 +187,131 @@ def _criteria_flowables(report: StandingsReport, styles, accent) -> list:
     return [Paragraph("Scoring criteria", styles["heading"]), table]
 
 
+def _progress_flowables(report: StandingsReport, styles, accent) -> list:
+    """Render the goal-tier board for print.
+
+    The meter is drawn as a one-row table with two cells rather than a
+    graphic, so it prints cleanly in black and white and needs no image
+    support.
+    """
+    progress = report.progress()
+    if progress is None:
+        return []
+
+    plan = progress.plan
+    flowables: list = [Paragraph("Goal progress", styles["heading"])]
+
+    headline = (
+        f"<b>{escape(progress.tier_text)}</b> &nbsp;&nbsp; "
+        f"<b>{progress.total:,.0f}</b> of {plan.target:,.0f} points "
+        f"&nbsp;&nbsp; {progress.fraction * 100:.2f}% &nbsp;&nbsp; "
+        f"{progress.participants} contributor(s)"
+    )
+    flowables.append(Paragraph(headline, styles["cell"]))
+    flowables.append(Spacer(1, 4))
+
+    # A two-cell bar: filled portion, then the remainder.
+    total_width = 250 * mm
+    filled = max(0.0, min(1.0, progress.fraction))
+    if 0 < filled < 1:
+        widths = [total_width * filled, total_width * (1 - filled)]
+        cells = [["", ""]]
+    elif filled >= 1:
+        widths, cells = [total_width], [[""]]
+    else:
+        widths, cells = [total_width], [[""]]
+
+    meter = Table(cells, colWidths=widths, rowHeights=[6 * mm], hAlign="LEFT")
+    meter_style = [
+        ("GRID", (0, 0), (-1, -1), 0.5, LINE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]
+    if filled > 0:
+        meter_style.append(("BACKGROUND", (0, 0), (0, 0), accent))
+    if 0 < filled < 1:
+        meter_style.append(("BACKGROUND", (1, 0), (1, 0), colors.HexColor("#e9ecf0")))
+    meter.setStyle(TableStyle(meter_style))
+    flowables.append(meter)
+    flowables.append(Spacer(1, 6))
+
+    if progress.next_tier is not None:
+        note = (
+            f"{progress.to_next_tier:,.0f} more points to reach "
+            f"{escape(progress.next_tier.label)}."
+        )
+    elif plan.goal_tiers:
+        note = "Every goal tier reached."
+    else:
+        note = ""
+    if progress.multiplier != 1.0:
+        note += (
+            f" Rewards are paid at &times;{progress.multiplier:g} for the tier reached."
+        )
+    if note:
+        flowables.append(Paragraph(note, styles["cell_small"]))
+        flowables.append(Spacer(1, 6))
+
+    rows = [
+        [
+            Paragraph("<b>Tier</b>", styles["cell"]),
+            Paragraph("<b>Threshold</b>", styles["cell"]),
+            Paragraph("<b>Reached</b>", styles["cell"]),
+        ]
+    ]
+    for index, tier in enumerate(plan.goal_tiers, start=1):
+        reached = "yes" if index <= progress.tiers_reached else "\u2014"
+        rows.append(
+            [
+                Paragraph(escape(tier.label), styles["cell"]),
+                Paragraph(f"{tier.threshold:,.0f}", styles["cell"]),
+                Paragraph(reached, styles["cell"]),
+            ]
+        )
+    table = Table(rows, colWidths=[40 * mm, 45 * mm, 30 * mm], hAlign="LEFT")
+    table.setStyle(_table_style(accent))
+    flowables.append(table)
+
+    flowables.append(Paragraph("Reward tiers", styles["heading"]))
+    reward_rows = [
+        [
+            Paragraph("<b>Reward tier</b>", styles["cell"]),
+            Paragraph("<b>Selects</b>", styles["cell"]),
+            Paragraph("<b>CMDRs</b>", styles["cell"]),
+            Paragraph("<b>Points</b>", styles["cell"]),
+            Paragraph("<b>Reward each</b>", styles["cell"]),
+        ]
+    ]
+    for award in progress.awards:
+        payout = (
+            f"{award.payout:,.0f} {escape(plan.currency)}" if award.payout else "\u2014"
+        )
+        reward_rows.append(
+            [
+                Paragraph(escape(award.band.label), styles["cell"]),
+                Paragraph(escape(award.band.describe()), styles["cell_small"]),
+                Paragraph(str(award.count), styles["cell"]),
+                Paragraph(escape(award.range_text()), styles["cell"]),
+                Paragraph(payout, styles["cell"]),
+            ]
+        )
+    reward = Table(
+        reward_rows,
+        colWidths=[45 * mm, 50 * mm, 20 * mm, 50 * mm, 45 * mm],
+        hAlign="LEFT",
+    )
+    reward.setStyle(_table_style(accent))
+    flowables.append(reward)
+    flowables.append(Spacer(1, 4))
+    flowables.append(
+        Paragraph(
+            "Each commander is paid by the highest band they reach. Rewards "
+            "are worked out by EDSG and paid in game by the organizer.",
+            styles["cell_small"],
+        )
+    )
+    return flowables
+
+
 def _standings_flowables(report: StandingsReport, styles, accent) -> list:
     event = report.event
     flowables = [Paragraph("Standings", styles["heading"])]
@@ -413,6 +538,7 @@ def write_pdf(
         story.append(Paragraph(escape(event.description), styles["tagline"]))
 
     story.extend(_summary_flowables(report, styles, accent))
+    story.extend(_progress_flowables(report, styles, accent))
     story.extend(_standings_flowables(report, styles, accent))
     story.append(PageBreak())
     story.extend(_criteria_flowables(report, styles, accent))

@@ -150,7 +150,15 @@ detectable and inconvenient, not impossible.
 
 ## Privacy
 
-EDSG makes no network connections. No telemetry, no update check, no account.
+EDSG makes **one** optional network connection, and only when an organizer
+presses *Check names against Spansh* in the criterion editor. It sends the
+system or station name typed into the filter field, and nothing else — no
+commander name, no Frontier ID, no journal content, no identifier of any
+kind. It is never called during scanning, scoring, signing or report
+generation, and the participant build never calls it at all.
+
+There is no telemetry, no update check and no account. Everything else EDSG
+does works with the network unplugged.
 
 A submission contains the commander name, Frontier ID, per-criterion totals, a
 breakdown by commodity or system or species as relevant, up to twelve sample

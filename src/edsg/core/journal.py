@@ -196,6 +196,18 @@ def iter_journal_dir(
         yield from iter_journal_file(path, stats)
 
 
+class MultipleCommandersError(JournalError):
+    """Raised when a folder holds journals for several commanders.
+
+    Carries the candidates so a user interface can offer a choice rather
+    than making the user reorganise their Saved Games folder.
+    """
+
+    def __init__(self, message: str, commanders: list[CommanderIdentity]):
+        super().__init__(message)
+        self.commanders = commanders
+
+
 @dataclass
 class CommanderIdentity:
     """The Frontier identity that owns a journal directory."""
@@ -236,11 +248,17 @@ def detect_commanders(directory: Path) -> list[CommanderIdentity]:
     return [CommanderIdentity(fid=fid, name=name) for fid, name in seen.items()]
 
 
-def resolve_commander(directory: Path) -> CommanderIdentity:
-    """Return the single commander owning ``directory``.
+def resolve_commander(directory: Path, fid: str | None = None) -> CommanderIdentity:
+    """Return the commander owning ``directory``.
 
-    Raises :class:`JournalError` when the directory holds no identifiable
-    commander or more than one.
+    Elite Dangerous writes every account on a machine into the same
+    folder, so more than one commander is a normal situation rather than
+    an error. When that happens the caller must say which one by passing
+    ``fid``; there is no safe way to guess, because the Frontier ID is
+    what a submission is attributed to.
+
+    Raises :class:`JournalError` when no commander can be identified, or
+    when several can and none was chosen.
     """
     commanders = detect_commanders(directory)
     if not commanders:
@@ -249,12 +267,23 @@ def resolve_commander(directory: Path) -> CommanderIdentity:
             "it is your Elite Dangerous journal folder and contains at "
             "least one Journal.*.log file."
         )
-    if len(commanders) > 1:
+
+    if fid:
+        for commander in commanders:
+            if commander.fid == fid:
+                return commander
         names = ", ".join(f"{c.name} ({c.fid})" for c in commanders)
         raise JournalError(
-            f"That directory contains journals for more than one commander: "
-            f"{names}. Point EDSG at a directory holding a single "
-            f"commander's journals."
+            f"No journals for commander {fid} were found in that folder. "
+            f"It holds journals for: {names}."
+        )
+
+    if len(commanders) > 1:
+        names = ", ".join(f"{c.name} ({c.fid})" for c in commanders)
+        raise MultipleCommandersError(
+            f"That folder holds journals for more than one commander: "
+            f"{names}. Choose which one to scan.",
+            commanders=commanders,
         )
     return commanders[0]
 

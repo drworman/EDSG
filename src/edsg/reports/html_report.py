@@ -143,11 +143,117 @@ code {{ background: var(--surface-alt); padding: .12rem .38rem;
   font-family: "DejaVu Sans Mono", Consolas, Menlo, monospace; }}
 .empty {{ color: var(--dim); font-style: italic; padding: 1rem 0; }}
 .reject td {{ color: var(--bad); }}
+/* ── progress board ────────────────────────────────────────────────── */
+.board {{
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1.1rem 1.25rem 1.25rem;
+}}
+.board-head {{
+  display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+  margin-bottom: .75rem;
+}}
+.board-tier {{
+  font-size: 1.5rem; font-weight: 700; color: var(--accent);
+  letter-spacing: .04em;
+}}
+.board-total {{ color: var(--text); font-size: 1rem; }}
+.board-total b {{ color: var(--accent); }}
+.board-pct {{ margin-left: auto; color: var(--dim); font-size: .9rem; }}
+
+.meter {{
+  position: relative; height: 30px; background: var(--surface-alt);
+  border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+}}
+.meter-fill {{
+  /* Longhand rather than the `inset` shorthand: older rendering engines,
+     including the one behind several PDF and screenshot tools, ignore
+     `inset` entirely and the bar comes out empty. */
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+  background-color: var(--accent-dim);
+}}
+.meter-ticks {{ position: absolute; left: 0; right: 0; top: 0; bottom: 0; }}
+.meter-tick {{
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: var(--bg); opacity: .85;
+}}
+.meter-tick.reached {{ background: var(--good); opacity: .9; }}
+.tier-scale {{
+  position: relative; height: 1.6rem; margin-top: .25rem;
+  font-size: .72rem; color: var(--dim);
+}}
+.tier-mark {{ position: absolute; transform: translateX(-50%); white-space: nowrap; }}
+.tier-mark.reached {{ color: var(--good); font-weight: 700; }}
+.board-note {{ margin: .7rem 0 0; color: var(--dim); font-size: .86rem; }}
+.board-note b {{ color: var(--text); }}
+
+.reward-table td.band {{ font-weight: 600; }}
+.reward-table td.payout {{ color: var(--accent); font-weight: 700; }}
+.reward-table tr.empty-band td {{ color: var(--faint); }}
+
+/* ── commander cards ───────────────────────────────────────────────── */
+/* Laid out with a table rather than grid or flex. The report is opened
+   in whatever the recipient has, and several PDF and screenshot engines
+   still in use ignore both, collapsing every card into a tall column. */
+.cmdr-card {{
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 4px;
+  margin-bottom: .55rem;
+}}
+.cmdr-card.rank-1 {{ border-left-color: var(--accent); }}
+.cmdr-card.rank-2, .cmdr-card.rank-3 {{ border-left-color: var(--accent-dim); }}
+.cmdr-card td {{ border: none; padding: .55rem .9rem; vertical-align: middle; }}
+.cmdr-rank {{
+  width: 3.4rem; font-size: 1.35rem; font-weight: 700; text-align: center;
+  color: var(--dim); font-variant-numeric: tabular-nums;
+}}
+.cmdr-card.rank-1 .cmdr-rank {{ color: var(--accent); }}
+.cmdr-name {{ font-weight: 600; font-size: 1.02rem; }}
+.cmdr-fid {{ color: var(--faint); font-size: .74rem; }}
+.cmdr-band {{ color: var(--dim); font-size: .76rem; }}
+.cmdr-total {{
+  width: 9rem; text-align: right; font-size: 1.25rem; font-weight: 700;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}}
+.cmdr-total small {{ display: block; font-size: .62rem; font-weight: 400;
+  color: var(--faint); letter-spacing: .1em; text-transform: uppercase; }}
+.cmdr-breakdown {{ padding-top: 0 !important; }}
+.chip {{
+  display: inline-block;
+  background: var(--surface-alt); border: 1px solid var(--line);
+  border-radius: 3px; padding: .18rem .5rem; font-size: .76rem;
+  white-space: nowrap; margin: 0 .3rem .3rem 0;
+}}
+.chip .k {{ color: var(--dim); }}
+.chip .v {{ color: var(--text); font-weight: 600;
+  font-variant-numeric: tabular-nums; }}
+.chip .u {{ color: var(--faint); }}
+.chip.zero {{ opacity: .55; }}
+
 footer {{ margin-top: 3rem; padding-top: 1rem;
   border-top: 1px solid var(--line); color: var(--dim); font-size: .8rem; }}
 
 @media print {{
   body {{ background: #fff; color: #000; padding: 0; font-size: 11pt; }}
+  .board, .cmdr-card {{ background: #fff; border-color: #999; }}
+  /* The fill must stay visible on paper. Browsers drop background
+     colours when printing unless told not to, which turned the meter
+     into an empty box. */
+  .meter {{ background: #e8e8e8; border-color: #666;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+  .meter-fill {{ background: #555;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+  .meter-tick {{ background: #fff; }}
+  .meter-tick.reached {{ background: #fff; }}
+  .tier-mark.reached {{ color: #000; }}
+  .cmdr-total, .board-tier, .board-total b {{ color: #000; }}
+  .chip {{ background: #f2f2f2; border-color: #bbb; }}
   table {{ background: #fff; }}
   thead th {{ background: #e8e8e8; color: #000;
     border-bottom: 2px solid #666; }}
@@ -218,6 +324,174 @@ def _criteria_table(report: StandingsReport) -> str:
         "<table><thead><tr><th class='num'>#</th><th>Criterion</th>"
         "<th>Rule</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
     )
+
+
+def _progress_board(report: StandingsReport) -> str:
+    """Render the goal-tier board, in the shape Frontier's goals use.
+
+    A tier readout, a meter marked with each threshold, and the reward
+    bands with the points range each one covers.
+    """
+    progress = report.progress()
+    if progress is None:
+        return ""
+
+    plan = progress.plan
+    fill = progress.fraction * 100
+
+    ticks, marks = [], []
+    for index, tier in enumerate(plan.goal_tiers, start=1):
+        if plan.target <= 0:
+            continue
+        position = min(100.0, tier.threshold / plan.target * 100)
+        reached = index <= progress.tiers_reached
+        state = " reached" if reached else ""
+        ticks.append(
+            f'<span class="meter-tick{state}" style="left:{position:.3f}%"></span>'
+        )
+        marks.append(
+            f'<span class="tier-mark{state}" style="left:{position:.3f}%">'
+            f"{escape(tier.label)}<br/>{tier.threshold:,.0f}</span>"
+        )
+
+    if progress.next_tier is not None:
+        note = (
+            f"<b>{progress.to_next_tier:,.0f}</b> more points to reach "
+            f"{escape(progress.next_tier.label)}."
+        )
+    elif plan.goal_tiers:
+        note = "<b>Every goal tier reached.</b>"
+    else:
+        note = ""
+    if progress.multiplier != 1.0:
+        note += (
+            f" Rewards are paid at <b>&times;{progress.multiplier:g}</b> for "
+            f"the tier reached."
+        )
+
+    rows = []
+    for award in progress.awards:
+        empty = " class='empty-band'" if not award.commanders else ""
+        payout = f"{award.payout:,.0f} {escape(plan.currency)}" if award.payout else "—"
+        rows.append(
+            f"<tr{empty}><td class='band'>{escape(award.band.label)}"
+            f"<span class='sub'>{escape(award.band.describe())}</span></td>"
+            f"<td class='num'>{award.count}</td>"
+            f"<td class='num'>{escape(award.range_text())}</td>"
+            f"<td class='num payout'>{payout}</td></tr>"
+        )
+
+    reward_table = (
+        "<table class='reward-table'><thead><tr><th>Reward tier</th>"
+        "<th class='num'>CMDRs</th><th class='num'>Points</th>"
+        "<th class='num'>Reward each</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody><caption>Each commander is paid by the highest band they "
+        "reach. Rewards are worked out by EDSG and paid in game by the "
+        "organizer.</caption></table>"
+    )
+
+    return f"""<h2>Goal progress</h2>
+<div class="board">
+  <div class="board-head">
+    <span class="board-tier">{escape(progress.tier_text)}</span>
+    <span class="board-total"><b>{progress.total:,.0f}</b>
+      / {plan.target:,.0f} points</span>
+    <span class="board-pct">{progress.fraction * 100:.2f}% &middot;
+      {progress.participants} contributor(s)</span>
+  </div>
+  <div class="meter">
+    <span class="meter-fill" style="width:{fill:.3f}%"></span>
+    <span class="meter-ticks">{"".join(ticks)}</span>
+  </div>
+  <div class="tier-scale">{"".join(marks)}</div>
+  <p class="board-note">{note}</p>
+</div>
+
+<h2>Reward tiers</h2>
+{reward_table}
+"""
+
+
+def _band_for(report: StandingsReport, commander_fid: str) -> str:
+    """Return the reward band a commander fell into, if any."""
+    progress = report.progress()
+    if progress is None:
+        return ""
+    for standing, award in _band_pairs(report, progress):
+        if standing.commander_fid == commander_fid:
+            return award.band.label
+    return ""
+
+
+def _band_pairs(report: StandingsReport, progress):
+    """Yield ``(standing, award)`` for every ranked commander."""
+    index = 0
+    for award in progress.awards:
+        for _ in award.commanders:
+            if index < len(report.standings):
+                yield report.standings[index], award
+            index += 1
+
+
+def _standings_cards(report: StandingsReport) -> str:
+    """Render the standings as one card per commander.
+
+    A wide table with a column per criterion becomes unreadable past
+    three or four criteria, and pushes the totals away from the names.
+    A card keeps each commander's rank, total and per-criterion
+    breakdown together.
+    """
+    event = report.event
+    if not report.standings:
+        return '<p class="empty">No eligible submissions were received.</p>'
+
+    progress = report.progress()
+    bands: dict[str, str] = {}
+    if progress is not None:
+        for standing, award in _band_pairs(report, progress):
+            bands[standing.commander_fid] = award.band.label
+
+    cards = []
+    for standing in report.standings:
+        medal = MEDALS.get(standing.rank, "")
+        tie = " =" if standing.tied else ""
+        rank_class = f" rank-{standing.rank}" if standing.rank <= 3 else ""
+
+        chips = []
+        for criterion in event.criteria:
+            points = standing.per_criterion.get(criterion.criterion_id, 0.0)
+            units = standing.per_criterion_units.get(criterion.criterion_id, 0.0)
+            zero = " zero" if not points else ""
+            chips.append(
+                f"<span class='chip{zero}'>"
+                f"<span class='k'>{escape(criterion.label)}</span> "
+                f"<span class='v'>{format_points(points)}</span> "
+                f"<span class='u'>"
+                f"{escape(format_units(units, criterion.measure))}</span></span>"
+            )
+
+        band = bands.get(standing.commander_fid, "")
+        band_line = f"<div class='cmdr-band'>{escape(band)}</div>" if band else ""
+
+        cards.append(
+            f"<table class='cmdr-card{rank_class}'><tbody>"
+            f"<tr>"
+            f"<td class='cmdr-rank' rowspan='2'>"
+            f"{medal or standing.rank}{tie}</td>"
+            f"<td><div class='cmdr-name'>CMDR "
+            f"{escape(standing.commander_name)}</div>"
+            f"<div class='cmdr-fid'>{escape(standing.commander_fid)}</div>"
+            f"{band_line}</td>"
+            f"<td class='cmdr-total' rowspan='2'>"
+            f"{format_points(standing.total_points)}"
+            f"<small>points</small></td>"
+            f"</tr>"
+            f"<tr><td class='cmdr-breakdown'>{''.join(chips)}</td></tr>"
+            f"</tbody></table>"
+        )
+
+    return f"<div class='cmdr-list'>{''.join(cards)}</div>"
 
 
 def _standings_table(report: StandingsReport) -> str:
@@ -337,8 +611,10 @@ def build_html(report: StandingsReport, style: ReportStyle | None = None) -> str
 <h2>Event summary</h2>
 {_summary_table(report)}
 
+{_progress_board(report)}
+
 <h2>Standings</h2>
-{_standings_table(report)}
+{_standings_cards(report)}
 
 <h2>Scoring criteria</h2>
 {_criteria_table(report)}

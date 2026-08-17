@@ -33,7 +33,15 @@ from edsg.core.criteria import (
     MetricKind,
     MissionOutcome,
 )
-from edsg.gui.widgets import CheckRow, TagField, label, show_error
+from edsg.core.namecheck import check_names, summarise
+from edsg.gui.widgets import (
+    CheckRow,
+    TagField,
+    button,
+    label,
+    run_in_background,
+    show_error,
+)
 
 COMMON_EVENTS = "e.g. Bounty, Died, Docked, FSDJump, MarketSell, MissionCompleted"
 STATION_TYPES = "e.g. Coriolis, Orbis, Ocellus, Outpost, AsteroidBase, FleetCarrier"
@@ -142,10 +150,12 @@ class CriterionDialog(QDialog):
         self.fields["outcomes"] = self.outcomes_row
         self.rows["outcomes"] = (outcomes_caption, self.outcomes_row)
 
-        self.factions_field = add_tag("factions", "Factions")
+        self.factions_field = add_tag("factions", "Factions", "e.g. Nobles of Dagr")
         self.powers_field = add_tag("powers", "Powers", "e.g. Nakato Kaine")
-        self.systems_field = add_tag("systems", "Systems")
-        self.stations_field = add_tag("stations", "Stations")
+        self.systems_field = add_tag(
+            "systems", "Systems", "e.g. Sol, Deciat \u2014 exactly as in the galaxy map"
+        )
+        self.stations_field = add_tag("stations", "Stations", "e.g. Jameson Memorial")
         self.station_types_field = add_tag(
             "station_types", "Station types", STATION_TYPES
         )
@@ -167,7 +177,31 @@ class CriterionDialog(QDialog):
         self.fields["mapping"] = self.mapping_row
         self.rows["mapping"] = (mapping_caption, self.mapping_row)
 
+        check_row = QHBoxLayout()
+        self.check_button = button("Check names against Spansh")
+        self.check_button.setToolTip(
+            "Look up the systems and stations you have typed. Advisory "
+            "only \u2014 EDSG never blocks on this, and a name Spansh has "
+            "not heard of may still be perfectly valid."
+        )
+        self.check_button.clicked.connect(self._check_names)
+        self.check_result = label("", "hint", wrap=True)
+        check_row.addWidget(self.check_button)
+        check_row.addWidget(self.check_result, 1)
+        layout.addLayout(check_row)
+
         layout.addWidget(self.filters_group)
+        layout.addWidget(
+            label(
+                "These options change with the metric chosen above. Leave a "
+                "field blank to place no restriction on it. Names are "
+                "matched loosely \u2014 case and punctuation are ignored \u2014 "
+                "but a misspelling will silently score zero, so check them "
+                "against the standings preview before the event closes.",
+                "hint",
+                wrap=True,
+            )
+        )
 
         # -- scoring ---------------------------------------------------
         scoring_group = QGroupBox("How it scores")
@@ -335,6 +369,51 @@ class CriterionDialog(QDialog):
             return float(text)
         except ValueError as exc:
             raise ValueError(f"{name} must be a number, not '{text}'.") from exc
+
+    def _check_names(self) -> None:
+        """Look the typed system and station names up on Spansh.
+
+        A misspelling here scores zero in silence, and a signed
+        invitation cannot be corrected afterwards without asking everyone
+        to rescan, so it is worth catching now. The check never blocks
+        saving: Spansh does not know every name, and being offline says
+        nothing about spelling.
+        """
+        systems = self.systems_field.values()
+        stations = self.stations_field.values()
+        if not systems and not stations:
+            self.check_result.setText("No system or station names to check.")
+            return
+
+        self.check_button.setEnabled(False)
+        self.check_result.setText("Asking Spansh\u2026")
+
+        def work(_report):
+            return check_names(systems, stations)
+
+        def finished(checks) -> None:
+            self.check_button.setEnabled(True)
+            problems, answered = summarise(checks)
+            if not answered:
+                self.check_result.setText(
+                    "Could not reach Spansh, so nothing was checked. This "
+                    "says nothing about your spelling."
+                )
+                return
+            if not problems:
+                self.check_result.setText(f"All {len(checks)} name(s) found on Spansh.")
+                self.check_result.setProperty("role", "good")
+            else:
+                self.check_result.setText(" ".join(item.message() for item in problems))
+                self.check_result.setProperty("role", "warn")
+            self.check_result.style().unpolish(self.check_result)
+            self.check_result.style().polish(self.check_result)
+
+        def failed(exc: BaseException) -> None:
+            self.check_button.setEnabled(True)
+            self.check_result.setText(f"Could not check the names: {exc}")
+
+        run_in_background(work, finished, failed)
 
     def _save(self) -> None:
         try:

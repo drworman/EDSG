@@ -15,7 +15,6 @@ from pathlib import Path
 
 from edsg.core.crypto import load_or_create_identity
 from edsg.core.errors import EDSGError
-from edsg.core.journal import resolve_commander
 from edsg.core.models import INVITATION_SUFFIX, EventDefinition
 from edsg.core.paths import ROLE_ORGANIZER, ROLE_PARTICIPANT, set_role
 from edsg.core.workflow import (
@@ -93,8 +92,15 @@ def _cmd_squadron(args: argparse.Namespace) -> int:
 
 
 def _cmd_commander(args: argparse.Namespace) -> int:
-    commander = resolve_commander(Path(args.journals))
-    print(f"{commander.name}\t{commander.fid}")
+    """List every commander whose journals are in a folder."""
+    from edsg.core.journal import detect_commanders
+
+    commanders = detect_commanders(Path(args.journals))
+    if not commanders:
+        print("No commander could be identified there.", file=sys.stderr)
+        return 1
+    for commander in commanders:
+        print(f"{commander.name}\t{commander.fid}")
     return 0
 
 
@@ -118,7 +124,11 @@ def _cmd_participate(args: argparse.Namespace) -> int:
     destination = Path(args.out)
     destination.mkdir(parents=True, exist_ok=True)
     path, submission, membership = participate(
-        invitation, Path(args.journals), identity, destination
+        invitation,
+        Path(args.journals),
+        identity,
+        destination,
+        commander_fid=args.commander or None,
     )
     print(path)
     print(
@@ -216,6 +226,14 @@ def build_parser() -> argparse.ArgumentParser:
     take_part.add_argument("--journals", required=True)
     take_part.add_argument("--out", required=True)
     take_part.add_argument("--identity", default="participant")
+    take_part.add_argument(
+        "--commander",
+        default="",
+        help=(
+            "Frontier ID to scan for, when the folder holds journals for "
+            "more than one commander."
+        ),
+    )
     take_part.set_defaults(func=_cmd_participate)
 
     close = subparsers.add_parser(
