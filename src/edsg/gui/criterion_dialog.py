@@ -11,6 +11,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
+    QCompleter,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from edsg.core.commodities import COMMODITIES
 from edsg.core.criteria import (
     ALLOWED_MEASURES,
     FILTER_GROUPS,
@@ -42,6 +44,9 @@ from edsg.gui.widgets import (
     run_in_background,
     show_error,
 )
+
+#: Every scoring field is this wide, so the column reads as a column.
+FIELD_WIDTH = 140
 
 COMMON_EVENTS = "e.g. Bounty, Died, Docked, FSDJump, MarketSell, MissionCompleted"
 STATION_TYPES = "e.g. Coriolis, Orbis, Ocellus, Outpost, AsteroidBase, FleetCarrier"
@@ -135,7 +140,22 @@ class CriterionDialog(QDialog):
 
         self.events_field = add_tag("events", "Journal events", COMMON_EVENTS)
         self.commodities_field = add_tag(
-            "commodities", "Commodities", "in-game or internal names both work"
+            "commodities",
+            "Commodities",
+            "start typing, or write your own \u2014 any spelling works",
+        )
+        # A completer for convenience only. Matching never consults the
+        # list, so a commodity missing from it still scores correctly.
+        completer = QCompleter(list(COMMODITIES), self.commodities_field)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchContains)
+        completer.setCompletionMode(QCompleter.PopupCompletion)
+        self.commodities_field.setCompleter(completer)
+        self.commodities_field.setToolTip(
+            "Any spelling works: the in-game name, Frontier's internal "
+            "name, or an abbreviation. 'Low Temperature Diamonds', 'Low "
+            "Temp. Diamonds' and '$lowtemperaturediamond_name;' are all "
+            "the same commodity to EDSG. Separate several with commas."
         )
         self.genera_field = add_tag("genera", "Genera", "e.g. Bacterium")
         self.species_field = add_tag("species", "Species", "e.g. Bacterium Tela")
@@ -209,53 +229,62 @@ class CriterionDialog(QDialog):
         scoring_group = QGroupBox("How it scores")
         scoring_layout = QVBoxLayout(scoring_group)
 
-        row = QHBoxLayout()
-        row.setSpacing(16)
+        # One control per row, each the same width, each with its own
+        # explanation underneath. Squeezing all three onto one line left
+        # the Unit Cap too narrow to read a five-figure number in.
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(4)
 
         self.points_spin = QDoubleSpinBox()
         self.points_spin.setDecimals(6)
         self.points_spin.setRange(-1_000_000.0, 1_000_000.0)
         self.points_spin.setValue(1.0)
-        row.addWidget(label("Points per unit"))
-        row.addWidget(self.points_spin)
+        self.points_spin.setFixedWidth(FIELD_WIDTH)
+        self.points_spin.setToolTip("What one unit is worth in points")
+        form.addRow("Points per unit", self.points_spin)
 
         self.cap_field = QLineEdit()
         self.cap_field.setPlaceholderText("required")
-        self.cap_field.setMaximumWidth(120)
+        self.cap_field.setFixedWidth(FIELD_WIDTH)
         self.cap_field.setToolTip(
             "How many units this criterion is worth in total, across "
             "everybody. Required."
         )
-        row.addWidget(label("Unit Cap"))
-        row.addWidget(self.cap_field)
+        form.addRow("Unit Cap", self.cap_field)
+        form.addRow(
+            "",
+            label(
+                "What this criterion races for: the total units it is worth "
+                "across everybody, filled in the order the work happened. "
+                "Once it is full, later work earns nothing \u2014 so the "
+                "caps together decide what the goal tiers are worth.",
+                "hint",
+                wrap=True,
+            ),
+        )
 
         self.minimum_field = QLineEdit()
         self.minimum_field.setPlaceholderText("none")
-        self.minimum_field.setMaximumWidth(120)
+        self.minimum_field.setFixedWidth(FIELD_WIDTH)
         self.minimum_field.setToolTip(
             "Units a single commander must reach before any of their work "
             "here scores. Optional."
         )
-        row.addWidget(label("Minimum per CMDR"))
-        row.addWidget(self.minimum_field)
-        row.addStretch(1)
-        scoring_layout.addLayout(row)
-
-        scoring_layout.addWidget(
+        form.addRow("Minimum per CMDR", self.minimum_field)
+        form.addRow(
+            "",
             label(
-                "The <b>Unit Cap</b> is what this criterion races for: the "
-                "total units it is worth across everybody, filled in the "
-                "order the work happened. Once it is full, later work earns "
-                "nothing \u2014 so the caps together decide what the goal "
-                "tiers are worth. It is required.<br/><br/>"
-                "The <b>Minimum per CMDR</b> is a participation floor. A "
-                "commander credited fewer units than this scores nothing "
-                "here, which keeps a token contribution out of the rewards. "
-                "Leave it blank for no floor.",
+                "A participation floor. A commander credited fewer units "
+                "than this scores nothing here, which keeps a token "
+                "contribution out of the rewards. Leave blank for no floor.",
                 "hint",
                 wrap=True,
-            )
+            ),
         )
+        scoring_layout.addLayout(form)
 
         self.notes_field = QPlainTextEdit()
         self.notes_field.setPlaceholderText(

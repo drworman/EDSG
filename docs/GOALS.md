@@ -73,57 +73,84 @@ than the minimum scores nothing for that criterion, which keeps a token
 contribution out of the rewards. Their units are not redistributed — that
 would change who filled the cap and when.
 
-## Reward tiers
+## Rewards
 
 Set one number: **Maximum Reward Pool in Credits**. That is the most you will
 pay out in total, across everyone, and it is only reached if every goal tier
 is reached.
 
-The pool unlocks a share per tier. On a five-tier event with a 500,000,000
+The pool unlocks a share per tier. On a five-tier event with a 1,000,000,000
 pool:
 
 | Reached | Unlocked |
 |---|---|
 | Below Tier 1 | nothing |
-| Tier 1 | 100,000,000 |
-| Tier 3 | 300,000,000 |
-| Tier 5 | 500,000,000 |
+| Tier 1 | 200,000,000 |
+| Tier 4 | 800,000,000 |
+| Tier 5 | 1,000,000,000 |
 
 There is no escalation to configure. The growth *is* the escalation.
 
 ### How the pool is shared out
 
-Reward tiers select commanders one of two ways:
+Two settings, defaulting to 10 and 25%:
 
-- **Top N commanders** — a fixed count, like Frontier's `Top 10 CMDRs`.
-- **Top X% of field** — a share of everyone who took part.
+| Setting | Means |
+|---|---|
+| **Bonus goes to the top** | How many leading commanders share a bonus. Set to 0 for a purely proportional split. |
+| **Bonus share of the pool** | How much of the pool that bonus takes. |
 
-Tiers fill **from the top down, and each commander is paid from the best tier
-they reach**, so `Top 10 CMDRs` sits *above* `Top 25%` rather than inside it
-and nobody is paid twice.
+The unlocked pool splits in two, and **both halves are proportional to what
+each commander contributed**:
 
-The unlocked pool is then divided by **place**, not by tier, with places in
-higher tiers worth more — five parts, four, three, two, one. Dividing by tier
-instead produces an absurdity whenever turnout is uneven: a tier holding one
-commander would split the same slice that ten commanders share, and eleventh
-place would out-earn first.
+- The bonus is shared *within* the top group, by contribution.
+- The remainder is shared among *everyone*, by contribution.
 
-Because it is per place, the amounts depend on turnout as well as on the tier
-reached. Both are worked out when the event closes.
+So a commander who contributed 9.29% of the goal receives 9.29% of the
+remainder, plus their proportional slice of the bonus if they placed inside
+the top group.
+
+### Why the bonus is proportional too
+
+A flat per-head bonus — everyone in the top ten gets the same 2.5% — is
+simpler to describe and badly wrong in practice. In a field of one commander
+who did 99% of the work and twenty-five who did 0.04% each, nine of the
+minnows land in the top ten by tie-break and collect the same flat share as
+the whale, while the tenth minnow, who did identical work, collects
+one eighty-fifth of it.
+
+Making the bonus proportional inside the group removes that entirely.
+Commanders who contributed nothing receive nothing.
+
+### The step at the edge of the bonus
+
+The last commander inside the top group earns roughly twice the first one
+outside it. That is inherent to having a leaderboard bonus at all, and it is
+deliberate: if you want the larger payout, place higher. Set **Bonus goes to
+the top** to 0 to remove it and pay purely by contribution.
+
+### Ties
+
+Commanders on equal points share a rank — 1, 2, 2, 4 — and are **paid
+identically**. If a tie straddles the edge of the top group, the whole tie is
+brought in, which dilutes the bonus for everyone in that group. The
+alternative would be deciding real money on which file happened to be read
+first.
 
 ## The distribution matrix
 
-Closing a tiered event publishes a table of every commander, the tier they
-landed in, their points, and the exact figure they are owed — ordered so an
-organizer can work down it one payment at a time.
+Closing a tiered event publishes a table of every commander: their rank,
+points, share of the goal, the bonus and proportional halves separately, and
+the exact figure they are owed. It is ordered so an organizer can work down
+it one payment at a time, and a star marks the commanders in the top group.
 
 ## What the reports show
 
 Every format carries the board:
 
 - **HTML** — the tier readout, a meter with each threshold marked and reached
-  tiers picked out, how far the next tier is, the reward tier table and the
-  full distribution matrix.
+  tiers picked out, how far the next tier is, a summary of how the pool
+  splits, and the full distribution matrix.
 - **PDF** — the same, drawn to print cleanly in black and white.
 - **Markdown** — a text meter that pastes into Discord, with a
   who-receives-what table.

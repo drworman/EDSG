@@ -338,6 +338,20 @@ class ScanSummary:
         )
 
 
+def _filename_part(value: str) -> str:
+    """Return a filename-safe fragment: words joined by single hyphens.
+
+    Anything a filesystem might object to becomes a hyphen, so an event
+    called ``Test Event #1`` contributes ``Test-Event-1``.
+    """
+    cleaned = "".join(
+        character if character.isalnum() else "-" for character in value.strip()
+    )
+    while "--" in cleaned:
+        cleaned = cleaned.replace("--", "-")
+    return cleaned.strip("-")[:60]
+
+
 @dataclass
 class Submission:
     """A participant's signed results for one event."""
@@ -360,9 +374,22 @@ class Submission:
     schema_version: int = SCHEMA_VERSION
 
     def filename(self) -> str:
-        """Return the canonical filename for this submission."""
-        stem = "".join(ch for ch in self.commander_fid if ch.isalnum() or ch in "-_")
-        return f"{stem or 'unknown-cmdr'}{SUBMISSION_SUFFIX}"
+        """Return the canonical filename for this submission.
+
+        Named for the event, the Frontier ID and the commander, so a
+        folder of submissions is readable without opening any of them.
+        A commander taking part in several events, or running more than
+        one account, no longer overwrites their own file, and an
+        organizer collecting them can see at a glance what belongs to
+        which event.
+        """
+        parts = [
+            _filename_part(self.event_name),
+            _filename_part(self.commander_fid) or "unknown-cmdr",
+            _filename_part(self.commander_name),
+        ]
+        stem = "-".join(part for part in parts if part)
+        return f"{stem}{SUBMISSION_SUFFIX}"
 
     def to_dict(self) -> dict[str, Any]:
         return {

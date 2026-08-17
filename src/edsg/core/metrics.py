@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from edsg.core.commodities import matches as commodity_matches
 from edsg.core.criteria import (
     Criterion,
     Filters,
@@ -84,6 +85,28 @@ def _prettify(raw: str) -> str:
         text = text[: -len("_name")]
     text = text.replace("_", " ").strip()
     return text.title() if text.islower() else text
+
+
+def _matches_commodity(value: str, patterns: Iterable[str]) -> bool:
+    """Match a commodity name however it happens to be spelled.
+
+    Commodities need more than case folding: the internal name is
+    singular and unabbreviated while the localised name is often neither,
+    so ``$lowtemperaturediamond_name;`` and "Low Temp. Diamonds" do not
+    reconcile on their own, and an organizer typing the full name matches
+    neither. See :mod:`edsg.core.commodities`.
+    """
+    return any(commodity_matches(value, pattern) for pattern in patterns)
+
+
+def _matches_commodity_field(
+    entry: JournalEntry, key: str, patterns: Iterable[str]
+) -> bool:
+    """Match a commodity filter against every spelling in the entry."""
+    patterns = list(patterns)
+    return any(
+        _matches_commodity(value, patterns) for value in entry.name_variants(key)
+    )
 
 
 def _matches_field(entry: JournalEntry, key: str, patterns: Iterable[str]) -> bool:
@@ -359,7 +382,7 @@ class MetricEvaluator:
     def _handle_mining(self, accumulator: Accumulator, entry: JournalEntry) -> None:
         filters = accumulator.criterion.filters
         commodity = entry.display_name("Type")
-        if filters.commodities and not _matches_field(
+        if filters.commodities and not _matches_commodity_field(
             entry, "Type", filters.commodities
         ):
             return
@@ -380,7 +403,7 @@ class MetricEvaluator:
         criterion = accumulator.criterion
         filters = criterion.filters
         commodity = entry.display_name("Type")
-        if filters.commodities and not _matches_field(
+        if filters.commodities and not _matches_commodity_field(
             entry, "Type", filters.commodities
         ):
             return
@@ -693,8 +716,8 @@ class MetricEvaluator:
             raw = str(item.get("Name") or "")
             localised = str(item.get("Name_Localised") or "")
             if filters.commodities and not (
-                _matches_any(raw, filters.commodities)
-                or _matches_any(localised, filters.commodities)
+                _matches_commodity(raw, filters.commodities)
+                or _matches_commodity(localised, filters.commodities)
             ):
                 continue
             matched.append(

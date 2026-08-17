@@ -372,30 +372,39 @@ def _progress_board(report: StandingsReport) -> str:
     elif plan.reward_pool:
         note += " <b>No rewards are paid:</b> the goal did not reach Tier 1."
 
-    rows = []
-    for award in progress.awards:
-        empty = " class='empty-band'" if not award.commanders else ""
-        each = f"{award.each:,.0f} {escape(plan.currency)}" if award.each else "—"
-        subtotal = f"{award.pool:,.0f}" if award.pool else "—"
-        rows.append(
-            f"<tr{empty}><td class='band'>{escape(award.band.label)}"
-            f"<span class='sub'>{escape(award.band.describe())}</span></td>"
-            f"<td class='num'>{award.count}</td>"
-            f"<td class='num'>{escape(award.range_text())}</td>"
-            f"<td class='num payout'>{each}</td>"
-            f"<td class='num'>{subtotal}</td></tr>"
+    plan = progress.plan
+    if progress.rewards_unlocked and progress.pool > 0:
+        top = progress.top_payouts
+        summary_rows = [
+            f"<tr><td class='band'>Unlocked at "
+            f"{escape(progress.tier_text)}</td>"
+            f"<td class='num payout'>{progress.pool:,.0f} "
+            f"{escape(plan.currency)}</td>"
+            f"<td>of a {plan.reward_pool:,.0f} maximum</td></tr>"
+        ]
+        if top and plan.top_share:
+            summary_rows.append(
+                f"<tr><td class='band'>Top {len(top)} bonus</td>"
+                f"<td class='num payout'>"
+                f"{progress.pool * plan.top_share:,.0f}</td>"
+                f"<td>{plan.top_share * 100:g}% of the pool, shared among "
+                f"the top {len(top)} by contribution</td></tr>"
+            )
+        summary_rows.append(
+            f"<tr><td class='band'>Shared by contribution</td>"
+            f"<td class='num payout'>"
+            f"{progress.pool * (1 - plan.top_share):,.0f}</td>"
+            f"<td>among all {progress.participants} contributor(s)</td></tr>"
         )
-
-    reward_table = (
-        "<table class='reward-table'><thead><tr><th>Reward tier</th>"
-        "<th class='num'>CMDRs</th><th class='num'>Points</th>"
-        "<th class='num'>Each</th><th class='num'>Tier total</th>"
-        "</tr></thead><tbody>"
-        + "".join(rows)
-        + "</tbody><caption>Each commander is paid from the highest tier "
-        "they reach. EDSG works the amounts out; the organizer pays them "
-        "in game.</caption></table>"
-    )
+        reward_table = (
+            "<table class='reward-table'><tbody>"
+            + "".join(summary_rows)
+            + "</tbody></table>"
+        )
+    else:
+        reward_table = (
+            "<p class='empty'>No rewards are due: the goal did not reach Tier 1.</p>"
+        )
 
     return f"""<h2>Goal progress</h2>
 <div class="board">
@@ -420,11 +429,7 @@ def _progress_board(report: StandingsReport) -> str:
 
 
 def _reward_matrix(report: StandingsReport) -> str:
-    """Render who landed in which tier and what each is owed.
-
-    The organizer pays these by hand in game, so the table is built to
-    be worked down one row at a time.
-    """
+    """Render who is owed what, in the order an organizer pays it."""
     progress = report.progress()
     if progress is None or not progress.plan.reward_pool:
         return ""
@@ -438,60 +443,35 @@ def _reward_matrix(report: StandingsReport) -> str:
         )
 
     rows = []
-    for award in progress.awards:
-        for position, (name, fid, points) in enumerate(award.commanders):
-            first = position == 0
-            band_cell = (
-                f"<td rowspan='{award.count}' class='band'>"
-                f"{escape(award.band.label)}"
-                f"<span class='sub'>{escape(award.band.describe())}</span></td>"
-                if first
-                else ""
-            )
-            rows.append(
-                f"<tr>{band_cell}"
-                f"<td class='cmdr'>CMDR {escape(name)}</td>"
-                f"<td><code>{escape(fid)}</code></td>"
-                f"<td class='num'>{format_points(points)}</td>"
-                f"<td class='num payout'>{award.each:,.0f} {currency}</td>"
-                f"</tr>"
-            )
-
+    for item in progress.payouts:
+        marker = " \u2605" if item.in_top else ""
+        rows.append(
+            f"<tr><td class='num rank'>{item.rank}{marker}</td>"
+            f"<td class='cmdr'>CMDR {escape(item.commander_name)}</td>"
+            f"<td><code>{escape(item.commander_fid)}</code></td>"
+            f"<td class='num'>{format_points(item.points)}</td>"
+            f"<td class='num'>{item.share * 100:.2f}%</td>"
+            f"<td class='num'>{item.bonus:,.0f}</td>"
+            f"<td class='num'>{item.proportional:,.0f}</td>"
+            f"<td class='num payout'>{item.total:,.0f} {currency}</td></tr>"
+        )
     if not rows:
         return ""
 
-    total = sum(award.pool for award in progress.awards)
     return (
         "<h2>Rewards</h2>"
-        "<table class='reward-table'><thead><tr><th>Reward tier</th>"
+        "<table class='reward-table'><thead><tr><th class='num'>Rank</th>"
         "<th>Commander</th><th>Frontier ID</th><th class='num'>Points</th>"
-        "<th class='num'>Receives</th></tr></thead><tbody>"
+        "<th class='num'>Share</th><th class='num'>Bonus</th>"
+        "<th class='num'>Contribution</th><th class='num'>Receives</th>"
+        "</tr></thead><tbody>"
         + "".join(rows)
-        + f"</tbody><caption>{total:,.0f} {currency} in total, from a pool "
-        f"of {progress.pool:,.0f} unlocked at {escape(progress.tier_text)}. "
-        f"Paid in game by the organizer.</caption></table>"
+        + f"</tbody><caption>{progress.paid_total:,.0f} {currency} in total, "
+        f"from {progress.pool:,.0f} unlocked at "
+        f"{escape(progress.tier_text)}. A star marks the top group sharing "
+        f"the bonus; commanders on equal points share a rank and are paid "
+        f"alike. Paid in game by the organizer.</caption></table>"
     )
-
-
-def _band_for(report: StandingsReport, commander_fid: str) -> str:
-    """Return the reward band a commander fell into, if any."""
-    progress = report.progress()
-    if progress is None:
-        return ""
-    for standing, award in _band_pairs(report, progress):
-        if standing.commander_fid == commander_fid:
-            return award.band.label
-    return ""
-
-
-def _band_pairs(report: StandingsReport, progress):
-    """Yield ``(standing, award)`` for every ranked commander."""
-    index = 0
-    for award in progress.awards:
-        for _ in award.commanders:
-            if index < len(report.standings):
-                yield report.standings[index], award
-            index += 1
 
 
 def _standings_cards(report: StandingsReport) -> str:
@@ -509,8 +489,9 @@ def _standings_cards(report: StandingsReport) -> str:
     progress = report.progress()
     bands: dict[str, str] = {}
     if progress is not None:
-        for standing, award in _band_pairs(report, progress):
-            bands[standing.commander_fid] = award.band.label
+        for item in progress.payouts:
+            if item.in_top:
+                bands[item.commander_fid] = "Top group"
 
     cards = []
     for standing in report.standings:

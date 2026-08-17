@@ -70,7 +70,8 @@ def test_full_cycle(tmp_path, make_journal, simple_event, identity):
         journal = mining_journal(make_journal, tonnes, name=fid, fid=fid)
         participant = generate_identity(fid)
         path, submission, _ = participate(invitation, journal, participant, subs)
-        assert path.name == f"{fid}{SUBMISSION_SUFFIX}"
+        assert path.name.endswith(SUBMISSION_SUFFIX)
+        assert fid in path.name
         assert submission.total_points == tonnes * 2.0
 
     report = close_event(simple_event, subs, invitation.signer_fingerprint)
@@ -80,15 +81,16 @@ def test_full_cycle(tmp_path, make_journal, simple_event, identity):
     assert not report.rejected
 
 
-def test_submission_filename_uses_frontier_id(
+def test_submission_filename_names_the_event_and_commander(
     tmp_path, make_journal, simple_event, identity
 ):
+    """A commander in several events must not overwrite their own file."""
     invitation = load_invitation(issue_invitation(simple_event, identity, tmp_path))
     journal = mining_journal(make_journal, 3, name="SOME NAME", fid="F9998887")
     path, _, _ = participate(
         invitation, journal, generate_identity("p"), tmp_path / "out"
     )
-    assert path.name == "F9998887.edsgs"
+    assert path.name == "Test-Event-F9998887-SOME-NAME.edsgs"
 
 
 def test_closing_twice_is_refused(tmp_path, make_journal, simple_event, identity):

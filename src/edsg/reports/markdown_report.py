@@ -98,47 +98,45 @@ def build_markdown(report: StandingsReport, style: ReportStyle | None = None) ->
             lines.append(f"| {_escape(tier.label)} | {tier.threshold:,.0f} | {mark} |")
         lines.append("")
 
-        lines.append("## Reward tiers")
+        lines.append("## Rewards")
         lines.append("")
-        if progress.rewards_unlocked:
-            lines.append(
-                f"_{progress.tier_text} unlocks {progress.pool:,.0f} "
-                f"{plan.currency} of the {plan.reward_pool:,.0f} maximum._"
-            )
-        elif plan.reward_pool:
-            lines.append("_No rewards are paid: the goal did not reach Tier 1._")
-        lines.append("")
-
-        lines.append("| Reward tier | CMDRs | Points | Each | Tier total |")
-        lines.append("|---|---:|---:|---:|---:|")
-        for award in progress.awards:
-            each = f"{award.each:,.0f} {plan.currency}" if award.each else "\u2014"
-            subtotal = f"{award.pool:,.0f}" if award.pool else "\u2014"
-            lines.append(
-                f"| {_escape(award.band.label)} | {award.count} "
-                f"| {_escape(award.range_text())} | {each} | {subtotal} |"
-            )
-        lines.append("")
-
-        if progress.rewards_unlocked and any(award.count for award in progress.awards):
-            lines.append("### Who receives what")
+        if not progress.rewards_unlocked:
+            lines.append("_No rewards are due: the goal did not reach Tier 1._")
             lines.append("")
-            lines.append("| Reward tier | Commander | Points | Receives |")
-            lines.append("|---|---|---:|---:|")
-            for award in progress.awards:
-                for name, _fid, points in award.commanders:
-                    lines.append(
-                        f"| {_escape(award.band.label)} "
-                        f"| CMDR {_escape(name)} | {points:,.0f} "
-                        f"| {award.each:,.0f} {plan.currency} |"
-                    )
+        else:
+            top = progress.top_payouts
+            lines.append(
+                f"**{progress.pool:,.0f} {plan.currency}** unlocked at "
+                f"{progress.tier_text}, of a {plan.reward_pool:,.0f} maximum."
+            )
             lines.append("")
+            if top and plan.top_share:
+                lines.append(
+                    f"{plan.top_share * 100:g}% goes to the top "
+                    f"{len(top)} by contribution; the rest is shared among "
+                    f"all {progress.participants} contributor(s) by "
+                    f"contribution."
+                )
+                lines.append("")
 
-        lines.append(
-            "_Each commander is paid from the highest tier they reach. "
-            "EDSG works the amounts out; the organizer pays them in game._"
-        )
-        lines.append("")
+            lines.append("| Rank | Commander | Points | Share | Receives |")
+            lines.append("|---:|---|---:|---:|---:|")
+            for payout in progress.payouts:
+                marker = " \u2605" if payout.in_top else ""
+                lines.append(
+                    f"| {payout.rank}{marker} "
+                    f"| CMDR {_escape(payout.commander_name)} "
+                    f"| {payout.points:,.0f} | {payout.share * 100:.2f}% "
+                    f"| {payout.total:,.0f} {plan.currency} |"
+                )
+            lines.append("")
+            lines.append(
+                f"_{progress.paid_total:,.0f} {plan.currency} in total. A "
+                f"star marks the top group sharing the bonus; commanders on "
+                f"equal points share a rank and are paid alike. EDSG works "
+                f"the amounts out; the organizer pays them in game._"
+            )
+            lines.append("")
 
     lines.append("## Standings")
     lines.append("")

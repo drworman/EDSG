@@ -274,32 +274,42 @@ def _progress_flowables(report: StandingsReport, styles, accent) -> list:
     table.setStyle(_table_style(accent))
     flowables.append(table)
 
-    flowables.append(Paragraph("Reward tiers", styles["heading"]))
+    flowables.append(Paragraph("Rewards", styles["heading"]))
+    if not progress.rewards_unlocked:
+        flowables.append(
+            Paragraph(
+                "No rewards are due: the goal did not reach Tier 1.",
+                styles["cell"],
+            )
+        )
+        return flowables
+
     reward_rows = [
         [
-            Paragraph("<b>Reward tier</b>", styles["cell"]),
-            Paragraph("<b>Selects</b>", styles["cell"]),
-            Paragraph("<b>CMDRs</b>", styles["cell"]),
+            Paragraph("<b>Rank</b>", styles["cell"]),
+            Paragraph("<b>Commander</b>", styles["cell"]),
             Paragraph("<b>Points</b>", styles["cell"]),
-            Paragraph("<b>Reward each</b>", styles["cell"]),
+            Paragraph("<b>Share</b>", styles["cell"]),
+            Paragraph("<b>Receives</b>", styles["cell"]),
         ]
     ]
-    for award in progress.awards:
-        payout = (
-            f"{award.each:,.0f} {escape(plan.currency)}" if award.each else "\u2014"
-        )
+    for item in progress.payouts:
+        marker = " *" if item.in_top else ""
         reward_rows.append(
             [
-                Paragraph(escape(award.band.label), styles["cell"]),
-                Paragraph(escape(award.band.describe()), styles["cell_small"]),
-                Paragraph(str(award.count), styles["cell"]),
-                Paragraph(escape(award.range_text()), styles["cell"]),
-                Paragraph(payout, styles["cell"]),
+                Paragraph(f"{item.rank}{marker}", styles["cell"]),
+                Paragraph(escape(item.commander_name), styles["cell"]),
+                Paragraph(f"{item.points:,.0f}", styles["cell"]),
+                Paragraph(f"{item.share * 100:.2f}%", styles["cell"]),
+                Paragraph(
+                    f"{item.total:,.0f} {escape(plan.currency)}",
+                    styles["cell"],
+                ),
             ]
         )
     reward = Table(
         reward_rows,
-        colWidths=[45 * mm, 50 * mm, 20 * mm, 50 * mm, 45 * mm],
+        colWidths=[18 * mm, 60 * mm, 28 * mm, 22 * mm, 45 * mm],
         hAlign="LEFT",
     )
     reward.setStyle(_table_style(accent))
@@ -307,8 +317,11 @@ def _progress_flowables(report: StandingsReport, styles, accent) -> list:
     flowables.append(Spacer(1, 4))
     flowables.append(
         Paragraph(
-            "Each commander is paid by the highest band they reach. Rewards "
-            "are worked out by EDSG and paid in game by the organizer.",
+            f"{progress.paid_total:,.0f} {escape(plan.currency)} in total, "
+            f"from {progress.pool:,.0f} unlocked at "
+            f"{escape(progress.tier_text)}. A star marks the top group "
+            f"sharing the bonus; commanders on equal points share a rank "
+            f"and are paid alike. Paid in game by the organizer.",
             styles["cell_small"],
         )
     )

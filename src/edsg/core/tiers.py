@@ -1,29 +1,42 @@
-"""Goal tiers, reward bands and progress.
+"""Goal tiers and how the reward pool is shared out.
 
-Modelled on Frontier's own community goals, which combine two things
-that are easy to conflate:
+Two things stack, and they are easy to conflate.
 
 *Goal tiers* measure the **collective** effort. Every participant's
-points add into one total, and that total climbs through tiers toward a
-target — Frontier renders this as "Tier 3/5".
+points add into one total, and that total climbs through tiers — rendered
+the way Frontier renders it, "Tier 3/5". The thresholds are derived from
+the event's criteria rather than typed: the top tier in use is worth
+every criterion's unit cap converted to points, so a tier cannot drift
+out of step with what it measures.
 
-*Reward bands* rank **individuals** against each other. Frontier uses a
-fixed count for the top band ("Top 10 CMDRs") and percentiles below it
-("Top 25%", "Top 50%", …), each paying a different amount.
+*Rewards* are shared out among individuals. The organizer sets one
+figure, the maximum pool, and the goal tier reached decides how much of
+it is unlocked. Nothing is unlocked below Tier 1.
 
-The two combine: the band a commander lands in decides *which* payout
-they get, and the goal tier the community reached decides *how much* that
-payout is worth. Rather than asking an organizer to fill a five-by-five
-grid of amounts, EDSG takes a base payout per band and a multiplier per
-goal tier — the same shape in ten inputs instead of twenty-five.
+The unlocked pool is then split in two:
+
+- A **bonus** off the top, shared among the leading commanders in
+  proportion to what each of them contributed.
+- The **remainder**, shared among everyone in proportion to what they
+  contributed.
+
+Both halves are proportional, which is what makes the result fair at any
+turnout. A flat per-head bonus looks simpler but pays a commander who
+contributed almost nothing exactly what one who carried the event
+receives, purely for landing inside the top ten. In a field of one whale
+and twenty-five minnows that was an eighty-five-fold difference between
+two commanders whose work was identical.
+
+There is still a step at the edge of the bonus: the last commander inside
+it earns roughly twice the first one outside. That is inherent to having
+a leaderboard bonus at all, and it is deliberate.
 
 Nothing here pays anybody. EDSG works out and publishes who is owed what;
-handing over the credits happens in-game.
+handing over the credits happens in game, through the squadron bank.
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -31,13 +44,16 @@ from typing import Any
 #: unreadable on a progress board.
 MAX_GOAL_TIERS = 5
 
-#: The same ceiling applies to reward bands.
-MAX_REWARD_BANDS = 5
+#: Commanders sharing the bonus taken off the top, by default.
+DEFAULT_TOP_COUNT = 10
+
+#: Fraction of the pool that bonus takes, by default.
+DEFAULT_TOP_SHARE = 0.25
 
 
 @dataclass
 class GoalTier:
-    """One collective threshold on the way to the target."""
+    """One collective threshold on the way to the goal."""
 
     label: str
     threshold: float
@@ -54,65 +70,24 @@ class GoalTier:
 
 
 @dataclass
-class RewardBand:
-    """One slice of the ranked participants, and what it pays.
-
-    ``top_count`` set makes this a fixed-size band — Frontier's "Top 10
-    CMDRs". Otherwise ``percentile`` defines the band as everyone down to
-    that share of the field.
-    """
-
-    label: str
-    payout: float = 0.0
-    top_count: int | None = None
-    percentile: float | None = None
-
-    @property
-    def is_fixed_count(self) -> bool:
-        return self.top_count is not None and self.top_count > 0
-
-    def describe(self) -> str:
-        """Return how this band selects its members."""
-        if self.is_fixed_count:
-            return f"top {self.top_count} commanders"
-        return f"top {self.percentile:g}% of the field"
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "label": self.label,
-            "payout": self.payout,
-            "top_count": self.top_count,
-            "percentile": self.percentile,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> RewardBand:
-        count = data.get("top_count")
-        percentile = data.get("percentile")
-        return cls(
-            label=str(data.get("label", "")),
-            payout=float(data.get("payout", 0.0)),
-            top_count=int(count) if count else None,
-            percentile=float(percentile) if percentile is not None else None,
-        )
-
-
-@dataclass
 class TierPlan:
-    """An event's goal tiers, reward bands and escalation.
+    """An event's goal tiers and reward pool.
 
-    Disabled by default: an event without a target is still a perfectly
-    good event, and the progress board simply does not appear.
+    Disabled by default: an event without rewards is still a perfectly
+    good leaderboard.
     """
 
     enabled: bool = False
     #: How many goal tiers are in use, at most five. The thresholds
-    #: themselves are derived from the criteria, not typed.
+    #: themselves come from the criteria, not from the organizer.
     tier_count: int = MAX_GOAL_TIERS
     #: The largest total the organizer is willing to pay out, reached
     #: only if every goal tier is reached.
     reward_pool: float = 0.0
-    reward_bands: list[RewardBand] = field(default_factory=list)
+    #: How many leading commanders share the bonus taken off the top.
+    top_count: int = DEFAULT_TOP_COUNT
+    #: Fraction of the pool that bonus takes, 0..1.
+    top_share: float = DEFAULT_TOP_SHARE
     currency: str = "Cr"
 
     # -- validation ----------------------------------------------------
@@ -136,24 +111,10 @@ class TierPlan:
                 "The goal has nothing to measure. Give every criterion a "
                 "unit cap; together they set what the top tier is worth."
             )
-        if len(self.reward_bands) > MAX_REWARD_BANDS:
-            problems.append(f"At most {MAX_REWARD_BANDS} reward tiers are supported.")
-        if not self.reward_bands:
-            problems.append("Add at least one reward tier.")
-
-        for band in self.reward_bands:
-            if not band.label.strip():
-                problems.append("Every reward tier needs a name.")
-            if band.top_count is None and band.percentile is None:
-                problems.append(
-                    f"Reward tier '{band.label}' needs either a commander "
-                    f"count or a percentile."
-                )
-            if band.percentile is not None and not 0 < band.percentile <= 100:
-                problems.append(
-                    f"Reward tier '{band.label}': percentile must be above 0 "
-                    f"and at most 100."
-                )
+        if self.top_count < 0:
+            problems.append("The number of top commanders cannot be negative.")
+        if not 0.0 <= self.top_share <= 1.0:
+            problems.append("The share taken off the top must be between 0% and 100%.")
         return problems
 
     # -- derived tiers -------------------------------------------------
@@ -162,13 +123,10 @@ class TierPlan:
         """Return the goal tiers, derived from the criteria.
 
         The top tier in use is the combined unit-cap value of every
-        criterion — the most the event can possibly be worth — and the
-        rest step down in equal shares of it. Five tiers step in
-        twentieths, four in quarters, and so on, so unticking a tier
-        rebalances the others rather than leaving a gap.
-
-        Nothing here is typed by the organizer, so a tier cannot drift
-        out of step with the criteria it is measuring.
+        criterion — the most the event can be worth — and the rest step
+        down in equal shares of it. Five tiers step in twentieths, four
+        in quarters, so unticking a tier rebalances the others rather
+        than leaving a gap.
         """
         count = max(1, min(self.tier_count, MAX_GOAL_TIERS))
         if ceiling <= 0:
@@ -190,10 +148,9 @@ class TierPlan:
     def pool_for(self, tiers_reached: int) -> float:
         """Return the credits unlocked by reaching ``tiers_reached``.
 
-        The pool grows a share per tier and is only whole once every
-        tier is reached. **Tier 1 unlocks nothing on its own being
-        missed**: below it the event paid for nothing, so the pool is
-        zero.
+        The pool grows a share per tier and is whole only when every tier
+        is reached. **Below Tier 1 nothing is unlocked at all**: the
+        event did not achieve what it set out to.
         """
         count = max(1, min(self.tier_count, MAX_GOAL_TIERS))
         if tiers_reached < 1:
@@ -213,84 +170,68 @@ class TierPlan:
             "enabled": self.enabled,
             "tier_count": self.tier_count,
             "reward_pool": self.reward_pool,
+            "top_count": self.top_count,
+            "top_share": self.top_share,
             "currency": self.currency,
-            "reward_bands": [band.to_dict() for band in self.reward_bands],
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> TierPlan:
         data = data or {}
-        bands = [
-            RewardBand.from_dict(item)
-            for item in (data.get("reward_bands") or [])
-            if isinstance(item, dict)
-        ]
+
+        def whole(key: str, fallback: int) -> int:
+            try:
+                return int(data.get(key, fallback))
+            except (TypeError, ValueError):
+                return fallback
+
         try:
-            count = int(data.get("tier_count", MAX_GOAL_TIERS))
+            share = float(data.get("top_share", DEFAULT_TOP_SHARE))
         except (TypeError, ValueError):
-            count = MAX_GOAL_TIERS
+            share = DEFAULT_TOP_SHARE
+
+        count = whole("tier_count", MAX_GOAL_TIERS)
         return cls(
             enabled=bool(data.get("enabled", False)),
             tier_count=max(1, min(count, MAX_GOAL_TIERS)),
             reward_pool=float(data.get("reward_pool", 0.0)),
+            top_count=max(0, whole("top_count", DEFAULT_TOP_COUNT)),
+            top_share=min(max(share, 0.0), 1.0),
             currency=str(data.get("currency", "Cr")),
-            reward_bands=bands,
         )
 
 
-def band_weights(count: int) -> list[float]:
-    """Return the relative value of a place in each reward tier.
-
-    Descending, so a place in the top tier is worth the most: with five
-    tiers the weights are 5, 4, 3, 2 and 1.
-
-    These weigh **each commander**, not each tier. Weighing whole tiers
-    instead produces an absurdity whenever the tiers are uneven — a tier
-    holding one commander would split the same slice one way that the
-    top ten split ten ways, and eleventh place would out-earn first.
-    """
-    if count <= 0:
-        return []
-    return [float(value) for value in range(count, 0, -1)]
-
-
-def default_reward_bands() -> list[RewardBand]:
-    """Return bands shaped like Frontier's, for the organizer to edit."""
-    return [
-        RewardBand(label="Top 10 CMDRs", top_count=10),
-        RewardBand(label="Top 25%", percentile=25.0),
-        RewardBand(label="Top 50%", percentile=50.0),
-        RewardBand(label="Top 75%", percentile=75.0),
-        RewardBand(label="Top 100%", percentile=100.0),
-    ]
-
-
 @dataclass
-class BandAward:
-    """What one reward tier worked out to for the commanders in it."""
+class Payout:
+    """What one commander is owed."""
 
-    band: RewardBand
-    commanders: list[tuple[str, str, float]] = field(default_factory=list)
-    #: Relative value of a single place in this tier.
-    weight: float = 0.0
-    #: Fraction of the unlocked pool this tier ended up taking.
+    commander_name: str
+    commander_fid: str
+    points: float
+    #: Fraction of the whole goal this commander contributed.
     share: float = 0.0
-    pool: float = 0.0
-    each: float = 0.0
-    lowest_points: float = 0.0
-    highest_points: float = 0.0
+    #: Competition rank, shared by commanders on equal points.
+    rank: int = 0
+    in_top: bool = False
+    bonus: float = 0.0
+    proportional: float = 0.0
 
     @property
-    def count(self) -> int:
-        return len(self.commanders)
+    def total(self) -> float:
+        return round(self.bonus + self.proportional, 2)
 
-    def range_text(self) -> str:
-        """Return the points range this tier covers, Inara-style."""
-        if not self.commanders:
-            return "\u2014"
-        if self.lowest_points == self.highest_points:
-            return f"{self.lowest_points:,.0f}"
-        return f"{self.lowest_points:,.0f} to {self.highest_points:,.0f}"
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "rank": self.rank,
+            "commander": self.commander_name,
+            "fid": self.commander_fid,
+            "points": self.points,
+            "share": round(self.share, 6),
+            "in_top": self.in_top,
+            "bonus": round(self.bonus, 2),
+            "proportional": round(self.proportional, 2),
+            "total": self.total,
+        }
 
 
 @dataclass
@@ -303,7 +244,7 @@ class ProgressReport:
     participants: int
     tiers_reached: int
     goal_tiers: list[GoalTier] = field(default_factory=list)
-    awards: list[BandAward] = field(default_factory=list)
+    payouts: list[Payout] = field(default_factory=list)
     pool: float = 0.0
 
     @property
@@ -325,17 +266,21 @@ class ProgressReport:
 
     @property
     def rewards_unlocked(self) -> bool:
-        """Return whether anything is paid at all.
-
-        Tier 1 is the floor: below it the event achieved nothing it set
-        out to, and nobody is paid.
-        """
+        """Return whether anything is paid at all."""
         return self.tiers_reached >= 1
 
     @property
     def tier_text(self) -> str:
         """Return ``Tier 3/5``, as Frontier renders it."""
         return f"Tier {self.tiers_reached}/{len(self.goal_tiers)}"
+
+    @property
+    def paid_total(self) -> float:
+        return round(sum(item.total for item in self.payouts), 2)
+
+    @property
+    def top_payouts(self) -> list[Payout]:
+        return [item for item in self.payouts if item.in_top]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -349,41 +294,46 @@ class ProgressReport:
             "fraction": round(self.fraction, 6),
             "reward_pool_maximum": self.plan.reward_pool,
             "reward_pool_unlocked": self.pool,
+            "top_count": self.plan.top_count,
+            "top_share": self.plan.top_share,
+            "paid_total": self.paid_total,
             "to_next_tier": self.to_next_tier,
             "next_tier": self.next_tier.to_dict() if self.next_tier else None,
             "goal_tiers": [tier.to_dict() for tier in self.goal_tiers],
-            "awards": [
-                {
-                    "band": award.band.label,
-                    "selects": award.band.describe(),
-                    "share": round(award.share, 6),
-                    "pool": award.pool,
-                    "each": award.each,
-                    "commander_count": award.count,
-                    "commanders": [
-                        {"name": name, "fid": fid, "points": points}
-                        for name, fid, points in award.commanders
-                    ],
-                    "points_low": award.lowest_points,
-                    "points_high": award.highest_points,
-                }
-                for award in self.awards
-            ],
+            "payouts": [item.to_dict() for item in self.payouts],
         }
+
+
+def rank_standings(standings: list[Any]) -> list[int]:
+    """Return a competition rank per standing, ties sharing a position.
+
+    Equal points means equal rank, and the next distinct score skips the
+    positions the tie consumed: 1, 2, 2, 4.
+    """
+    ranks: list[int] = []
+    previous: float | None = None
+    position = 0
+    for index, item in enumerate(standings, start=1):
+        if previous is None or item.total_points != previous:
+            position = index
+            previous = item.total_points
+        ranks.append(position)
+    return ranks
 
 
 def build_progress(
     plan: TierPlan, standings: list[Any], ceiling: float
 ) -> ProgressReport:
-    """Work out tier progress and per-tier awards from ranked standings.
+    """Work out tier progress and every commander's payout.
 
-    ``ceiling`` is the combined unit-cap value of the event's criteria:
-    the most the event can be worth, and therefore the top goal tier.
+    ``standings`` is in rank order, and ``ceiling`` is the combined
+    unit-cap value of the event's criteria.
 
-    Bands are filled by position, so each commander lands in exactly one
-    — the best they qualify for. That is how Frontier's tables read,
-    with `Top 10 CMDRs` sitting above the `Top 25%` range rather than
-    inside it.
+    **Ties are paid alike.** Commanders on equal points hold the same
+    rank, and if that rank falls at the edge of the top group they are
+    all brought in — sharing the bonus among more people and diluting it
+    for everyone in the group, rather than breaking the tie on something
+    arbitrary like which file was read first.
     """
     total = float(sum(item.total_points for item in standings))
     participants = len(standings)
@@ -391,47 +341,47 @@ def build_progress(
     tiers_reached = plan.tier_reached(total, ceiling)
     pool = plan.pool_for(tiers_reached)
 
-    weights = band_weights(len(plan.reward_bands))
-    awards: list[BandAward] = []
-    assigned = 0
-    for index, band in enumerate(plan.reward_bands):
-        award = BandAward(band=band, share=0.0)
-        award.weight = weights[index] if index < len(weights) else 0.0
+    ranks = rank_standings(standings)
+    payouts = [
+        Payout(
+            commander_name=item.commander_name,
+            commander_fid=item.commander_fid,
+            points=item.total_points,
+            share=(item.total_points / total) if total > 0 else 0.0,
+            rank=rank,
+        )
+        for item, rank in zip(standings, ranks, strict=True)
+    ]
 
-        if assigned < participants:
-            if band.is_fixed_count:
-                end = min(assigned + int(band.top_count or 0), participants)
-            else:
-                fraction = (band.percentile or 100.0) / 100.0
-                end = min(
-                    max(assigned + 1, math.ceil(participants * fraction)),
-                    participants,
-                )
-            members = standings[assigned:end]
-            if members:
-                award.commanders = [
-                    (item.commander_name, item.commander_fid, item.total_points)
-                    for item in members
-                ]
-                points = [item.total_points for item in members]
-                award.lowest_points = min(points)
-                award.highest_points = max(points)
-                assigned = end
+    # The top group is everyone ranked inside the cut. A tie straddling
+    # the boundary brings the whole tie in: splitting it would decide
+    # real money on an accident of ordering.
+    if plan.top_count > 0:
+        cutoff = 0
+        for item in payouts:
+            if item.rank <= plan.top_count:
+                cutoff = max(cutoff, item.rank)
+        for item in payouts:
+            item.in_top = bool(cutoff) and item.rank <= cutoff
 
-        awards.append(award)
+    if pool > 0 and total > 0:
+        bonus_pool = pool * plan.top_share
+        rest_pool = pool - bonus_pool
 
-    # The pool is shared out per commander rather than per tier, so a
-    # place in a higher tier is always worth more than a place in a
-    # lower one however the field falls. Every credit in the unlocked
-    # pool is allocated, and never more than it.
-    denominator = sum(award.weight * award.count for award in awards)
-    if pool > 0 and denominator > 0:
-        for award in awards:
-            if not award.count:
-                continue
-            award.each = round(pool * award.weight / denominator, 2)
-            award.pool = round(award.each * award.count, 2)
-            award.share = award.pool / pool if pool else 0.0
+        top_points = sum(item.points for item in payouts if item.in_top)
+        # With no leading contributor worth rewarding, the bonus falls
+        # back into the proportional share rather than going unpaid.
+        if top_points <= 0:
+            rest_pool = pool
+            bonus_pool = 0.0
+
+        for item in payouts:
+            item.proportional = rest_pool * item.share
+            if item.in_top and top_points > 0:
+                # Proportional inside the group as well, so a commander
+                # who barely qualified cannot collect what one who
+                # carried the event collects.
+                item.bonus = bonus_pool * (item.points / top_points)
 
     return ProgressReport(
         plan=plan,
@@ -440,20 +390,19 @@ def build_progress(
         participants=participants,
         tiers_reached=tiers_reached,
         goal_tiers=goal_tiers,
-        awards=awards,
+        payouts=payouts,
         pool=pool,
     )
 
 
 __all__ = [
+    "DEFAULT_TOP_COUNT",
+    "DEFAULT_TOP_SHARE",
     "MAX_GOAL_TIERS",
-    "MAX_REWARD_BANDS",
-    "BandAward",
     "GoalTier",
+    "Payout",
     "ProgressReport",
-    "RewardBand",
     "TierPlan",
-    "band_weights",
     "build_progress",
-    "default_reward_bands",
+    "rank_standings",
 ]

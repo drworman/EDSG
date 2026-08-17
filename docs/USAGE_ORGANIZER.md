@@ -89,6 +89,11 @@ in the reports; keep it short.
 The *Duplicate* button is the quickest way to build a set of similar criteria —
 one per ore, say — then edit each copy.
 
+**Commodity names are forgiving.** "Low Temperature Diamonds", "Low Temp.
+Diamonds" and `$lowtemperaturediamond_name;` are the same commodity to EDSG,
+and the field offers an autocomplete. Systems and stations are matched
+loosely too, but not reconciled the same way — check those.
+
 **Check your names.** A misspelled system or station scores zero in silence,
 and once the invitation is signed there is no correcting it without reissuing
 and asking everyone to rescan. The criterion editor has a **Check names
@@ -109,9 +114,12 @@ which a commander scores nothing for that criterion.
 Optional, and skippable for a plain leaderboard.
 
 Goal tier thresholds are worked out from your criteria — you never type a
-target. Untick the tiers you do not want and the rest rebalance. Set one
-figure, **Maximum Reward Pool in Credits**, and EDSG unlocks a share of it per
-tier reached and shares it out when the event closes.
+target. Untick the tiers you do not want and the rest rebalance.
+
+Set **Maximum Reward Pool in Credits**, and choose how many leading
+commanders share a bonus and how much of the pool it takes (10 and 25% by
+default). Everything is then shared out in proportion to what each commander
+contributed, so nobody can out-earn someone who did more.
 
 Nothing is paid if the goal does not reach Tier 1. See [GOALS.md](GOALS.md).
 

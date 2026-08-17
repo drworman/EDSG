@@ -16,6 +16,56 @@ govern it: `SCHEMA_VERSION` in `core/models.py` for the structure of
 invitations and submissions, and `CANONICAL_FORM` in `core/canonical.py` for
 the encoding signatures are computed over.
 
+## [20260817]
+
+### Changed
+- **Rewards are shared out in proportion to contribution.** The reward
+  tier brackets are gone. An organizer now sets two figures — how many
+  leading commanders share a bonus, and how much of the pool that bonus
+  takes, defaulting to 10 and 25% — and both halves of the pool are
+  divided by what each commander actually contributed.
+
+  The bracket scheme it replaces paid everyone in a bracket the same flat
+  amount, which in a field of one large contributor and twenty-five small
+  ones handed nine of the small ones the same share as the large one,
+  purely for landing inside the top ten on a tie-break; the tenth, who had
+  done identical work, received an eighty-fifth as much. Making the bonus
+  proportional inside the group removes that, and commanders who
+  contributed nothing now receive nothing.
+- **Commanders on equal points are paid alike.** Ties share a rank
+  (1, 2, 2, 4), and a tie straddling the edge of the top group brings the
+  whole tie in, diluting the bonus for that group rather than deciding
+  real money on which file was read first.
+- **Submissions are named for their event and commander** —
+  `20260817-Mining-Drive-Test-F10467336-HUGH-JASSOLE.edsgs` — so a
+  commander in several events, or running more than one account, no longer
+  overwrites their own file, and an organizer can see what belongs where.
+- A manual run of the release workflow now uploads build artefacts loose
+  rather than as archives. GitHub zips whatever an artefact step uploads,
+  so building a tarball first handed Linux users a `.tar.gz` inside a
+  `.zip` for no reason. Tagged runs still produce proper release assets.
+- The criterion editor puts **Points per unit**, **Unit Cap** and
+  **Minimum per CMDR** on separate rows at a shared width, each with its
+  own explanation. The Unit Cap was too narrow to read a five-figure
+  number in.
+
+### Fixed
+- **Commodity filters silently missed most commodities.** Elite writes the
+  same commodity three ways: `$lowtemperaturediamond_name;` internally,
+  "Low Temp. Diamonds" localised, and an organizer types "Low Temperature
+  Diamonds". Case folding alone reconciled none of them — the internal
+  name is singular and unabbreviated, the localised name is neither — so
+  the criterion matched nothing and scored zero without complaint.
+  Commodity names are now compared word by word, with Frontier's
+  abbreviations expanded and plurals folded, so every spelling converges.
+  The organizer's commodity field also offers an autocomplete, though
+  matching never consults it: a commodity Frontier adds tomorrow still
+  scores correctly today.
+
+### Added
+- A commodity catalogue for the organizer's autocomplete. Convenience
+  only, and explicitly not authoritative.
+
 ## [20260816]
 
 ### Changed
@@ -358,7 +408,8 @@ Document schema `SCHEMA_VERSION` 1, signing encoding
   schema and covered by synthetic tests, having not appeared in the journal
   corpus used during development.
 
-[Unreleased]: https://github.com/drworman/EDSG/compare/20260816...HEAD
+[Unreleased]: https://github.com/drworman/EDSG/compare/20260817...HEAD
+[20260817]: https://github.com/drworman/EDSG/compare/20260816...20260817
 [20260816]: https://github.com/drworman/EDSG/compare/20260811...20260816
 [20260811]: https://github.com/drworman/EDSG/compare/20260810...20260811
 [20260810]: https://github.com/drworman/EDSG/releases/tag/20260810

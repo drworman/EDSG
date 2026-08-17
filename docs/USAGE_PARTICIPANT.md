@@ -61,7 +61,10 @@ If a criterion has a **cap**, you may see something like `1,500 t (of 1,963)` �
 you mined more, but only the capped amount converts to points. That is the
 organizer's rule, not a bug.
 
-Your submission is saved automatically to `Documents/EDSG/Submissions`.
+Your submission is saved automatically to `Documents/EDSG/Submissions`, named
+for the event and for you — `20260817-Mining-Drive-F10467336-HUGH-JASSOLE.edsgs`
+— so taking part in several events, or playing more than one commander, never
+overwrites an earlier file.
 
 ## 4 · Send it in
 

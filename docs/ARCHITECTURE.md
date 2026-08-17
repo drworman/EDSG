@@ -21,6 +21,7 @@ src/edsg/
 │   ├── metrics.py        Single-pass scoring engine
 │   ├── models.py         Event, invitation and submission documents
 │   ├── allocation.py     Filling unit caps in the order work happened
+│   ├── commodities.py    Reconciling every spelling of a commodity name
 │   ├── namecheck.py      Advisory system and station lookups via Spansh
 │   ├── palettes.py       Theme colours, with derived, contrast-checked tones
 │   ├── paths.py          Per-role config dirs, journal discovery, workspace
@@ -159,9 +160,33 @@ do, with `Top 10 CMDRs` showing a *higher* contribution range than the
 `Top 25%` row beneath it rather than being contained by it.
 
 The organizer sets a single maximum pool. It unlocks a share per goal tier
-reached, and is divided by **place** rather than by tier — dividing by tier
-lets eleventh place out-earn first whenever turnout is uneven, because a tier
-holding one commander would split the same slice ten commanders share.
+reached and is then divided **in proportion to contribution**, both within
+the top group and across everyone else.
+
+Proportionality matters in both halves. A flat per-head bonus pays a
+commander who contributed 0.04% exactly what one who contributed 99%
+receives, purely for landing inside the top ten on a tie-break — an
+eighty-five-fold difference between two commanders whose work was identical.
+
+## One commodity, three spellings
+
+Elite writes a commodity name three ways, and none of them fold together on
+case alone::
+
+    "Type":           "$lowtemperaturediamond_name;"   singular, unabbreviated
+    "Type_Localised": "Low Temp. Diamonds"             plural, abbreviated
+    organizer types:  "Low Temperature Diamonds"       plural, unabbreviated
+
+`core/commodities.py` reconciles them by working on words rather than on the
+whole string: split on whatever separators exist, expand Frontier's
+abbreviations, fold plurals, rejoin. All three become
+``lowtemperaturediamond``.
+
+It is mechanical rather than a lookup table on purpose. A table would go
+stale the next time Frontier adds a commodity, and it would fail *closed* —
+silently scoring zero, which is the bug being fixed. The catalogue in that
+module feeds the organizer's autocomplete and nothing else; a test asserts
+that matching never consults it.
 
 ## Talking to the network
 

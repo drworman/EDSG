@@ -21,7 +21,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QDoubleSpinBox,
     QFormLayout,
     QFrame,
@@ -35,24 +34,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from edsg.core.tiers import (
-    MAX_GOAL_TIERS,
-    MAX_REWARD_BANDS,
-    RewardBand,
-    TierPlan,
-    band_weights,
-    default_reward_bands,
-)
-from edsg.gui.widgets import button, label
-
-#: How a reward tier picks its members.
-BAND_MODES = (("percent", "Top % of field"), ("count", "Top N commanders"))
+from edsg.core.tiers import MAX_GOAL_TIERS, TierPlan
+from edsg.gui.widgets import label
 
 #: Column widths shared by the headings and the rows beneath them, so a
 #: heading always sits over the control it names.
 TIER_COLUMNS = (56, 150, 1)
-BAND_COLUMNS = (56, 190, 170, 130, 1)
-
 #: Enough height for a combo box and a spin box without clipping.
 ROW_HEIGHT = 34
 
@@ -109,87 +96,6 @@ class GoalTierRow(QWidget):
 
     def show_threshold(self, value: float | None) -> None:
         self.threshold.setText("\u2014" if value is None else f"{value:,.0f}")
-
-
-class RewardBandRow(QWidget):
-    """One reward tier: who it covers, and its share of the pool."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.setMinimumHeight(ROW_HEIGHT)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 2, 0, 2)
-        layout.setSpacing(8)
-
-        self.enabled = QCheckBox()
-        self.enabled.setFixedWidth(BAND_COLUMNS[0])
-
-        self.label_field = QLineEdit()
-        self.label_field.setFixedWidth(BAND_COLUMNS[1])
-
-        self.mode = QComboBox()
-        for key, text in BAND_MODES:
-            self.mode.addItem(text, key)
-        self.mode.setFixedWidth(BAND_COLUMNS[2])
-        self.mode.currentIndexChanged.connect(self._on_mode_changed)
-
-        self.size_holder = QWidget()
-        self.size_holder.setFixedWidth(BAND_COLUMNS[3])
-        size_layout = QHBoxLayout(self.size_holder)
-        size_layout.setContentsMargins(0, 0, 0, 0)
-        size_layout.setSpacing(0)
-
-        self.percent = QDoubleSpinBox()
-        self.percent.setRange(0.1, 100.0)
-        self.percent.setDecimals(1)
-        self.percent.setSuffix(" %")
-        self.count = QSpinBox()
-        self.count.setRange(1, 10_000)
-        self.count.setPrefix("top ")
-        size_layout.addWidget(self.percent)
-        size_layout.addWidget(self.count)
-
-        self.share = QLabel("\u2014")
-        self.share.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.share.setProperty("role", "hint")
-        self.share.setToolTip(
-            "Relative worth of one place in this tier. The pool is shared "
-            "out so a place here always beats a place below."
-        )
-
-        for widget in (self.enabled, self.label_field, self.mode, self.size_holder):
-            layout.addWidget(widget)
-        layout.addWidget(self.share, 1)
-        self._on_mode_changed()
-
-    def _on_mode_changed(self) -> None:
-        by_count = self.mode.currentData() == "count"
-        self.count.setVisible(by_count)
-        self.percent.setVisible(not by_count)
-
-    def is_active(self) -> bool:
-        return self.enabled.isChecked()
-
-    def to_band(self) -> RewardBand:
-        by_count = self.mode.currentData() == "count"
-        return RewardBand(
-            label=self.label_field.text().strip() or "Tier",
-            top_count=int(self.count.value()) if by_count else None,
-            percentile=None if by_count else float(self.percent.value()),
-        )
-
-    def load(self, band: RewardBand | None) -> None:
-        self.enabled.setChecked(band is not None)
-        if band is None:
-            return
-        self.label_field.setText(band.label)
-        if band.is_fixed_count:
-            self.mode.setCurrentIndex(self.mode.findData("count"))
-            self.count.setValue(int(band.top_count or 1))
-        else:
-            self.mode.setCurrentIndex(self.mode.findData("percent"))
-            self.percent.setValue(float(band.percentile or 100.0))
-        self._on_mode_changed()
 
 
 class RewardsPanel(QWidget):
@@ -283,37 +189,48 @@ class RewardsPanel(QWidget):
         pool_form.addRow("", self.pool_preview)
         layout.addWidget(self.pool_group)
 
-        # -- reward tiers -----------------------------------------------
-        self.band_group = QGroupBox(f"Reward tiers (up to {MAX_REWARD_BANDS})")
-        band_layout = QVBoxLayout(self.band_group)
-        band_layout.addWidget(
-            _heading_row(
-                ("Use", "Name", "Selects", "Size", "Worth per place"),
-                BAND_COLUMNS,
-            )
+        # -- how the pool is shared -----------------------------------
+        self.band_group = QGroupBox("How the pool is shared")
+        share_form = QFormLayout(self.band_group)
+
+        self.top_count = QSpinBox()
+        self.top_count.setRange(0, 10_000)
+        self.top_count.setFixedWidth(140)
+        self.top_count.setToolTip(
+            "How many leading commanders share the bonus. Set to 0 for a "
+            "purely proportional split with no leaderboard bonus."
         )
+        self.top_count.valueChanged.connect(self._refresh_preview)
+        share_form.addRow("Bonus goes to the top", self.top_count)
 
-        self.band_rows: list[RewardBandRow] = []
-        for _ in range(MAX_REWARD_BANDS):
-            row = RewardBandRow()
-            row.enabled.toggled.connect(self._refresh_preview)
-            self.band_rows.append(row)
-            band_layout.addWidget(row)
+        self.top_share = QSpinBox()
+        self.top_share.setRange(0, 100)
+        self.top_share.setSuffix(" %")
+        self.top_share.setFixedWidth(140)
+        self.top_share.setToolTip(
+            "How much of the pool is taken off the top for that bonus"
+        )
+        self.top_share.valueChanged.connect(self._refresh_preview)
+        share_form.addRow("Bonus share of the pool", self.top_share)
 
-        band_layout.addWidget(
+        self.share_preview = label("", "hint", wrap=True)
+        share_form.addRow("", self.share_preview)
+
+        share_form.addRow(
+            "",
             label(
-                "Tiers fill from the top down and each commander is paid "
-                "from the best one they reach, so a 'Top 10 CMDRs' tier sits "
-                "above 'Top 25%' rather than inside it. How much each "
-                "commander actually receives depends on the turnout and the "
-                "goal tier reached, and is worked out when the event closes.",
+                "Both halves are shared out <b>in proportion to what each "
+                "commander contributed</b>, so nobody can out-earn someone "
+                "who did more. Commanders on equal points hold the same "
+                "rank and are paid alike, which dilutes the bonus for "
+                "everyone in a tie rather than breaking it arbitrarily.<br/>"
+                "<br/>How much each commander receives depends on the "
+                "turnout and the goal tier reached, and is worked out when "
+                "the event closes.",
                 "hint",
                 wrap=True,
-            )
+            ),
         )
-        reset = button("Reset to Frontier's layout")
-        reset.clicked.connect(self._fill_default_bands)
-        band_layout.addWidget(reset, 0, Qt.AlignLeft)
         layout.addWidget(self.band_group)
 
         divider = QFrame()
@@ -373,14 +290,24 @@ class RewardsPanel(QWidget):
                 row.name.setText("\u2014")
                 row.show_threshold(None)
 
-        active = [row for row in self.band_rows if row.is_active()]
-        weights = band_weights(len(active))
-        for row in self.band_rows:
-            row.share.setText("\u2014")
-        for row, weight in zip(active, weights, strict=True):
-            row.share.setText(f"\u00d7 {weight:g}")
-
         pool = self.pool.value()
+        top = self.top_count.value()
+        bonus_pct = self.top_share.value()
+        if pool > 0 and top > 0 and bonus_pct > 0:
+            bonus = pool * bonus_pct / 100.0
+            self.share_preview.setText(
+                f"Of a full {pool:,.0f} pool, {bonus:,.0f} is shared among "
+                f"the top {top} by contribution, and the remaining "
+                f"{pool - bonus:,.0f} among everyone by contribution."
+            )
+        elif pool > 0:
+            self.share_preview.setText(
+                f"The whole {pool:,.0f} is shared among everyone in "
+                f"proportion to what they contributed."
+            )
+        else:
+            self.share_preview.setText("")
+
         if pool > 0 and count:
             per_tier = pool / count
             self.pool_preview.setText(
@@ -393,12 +320,6 @@ class RewardsPanel(QWidget):
                 "Set a pool to award rewards. Nothing is paid if the goal "
                 "does not reach Tier 1."
             )
-
-    def _fill_default_bands(self) -> None:
-        defaults = default_reward_bands()
-        for index, row in enumerate(self.band_rows):
-            row.load(defaults[index] if index < len(defaults) else None)
-        self._refresh_preview()
 
     # -- load and save -------------------------------------------------
 
@@ -413,9 +334,8 @@ class RewardsPanel(QWidget):
         for row in self.tier_rows:
             row.enabled.setChecked(row.index <= count)
 
-        bands = plan.reward_bands or default_reward_bands()
-        for index, row in enumerate(self.band_rows):
-            row.load(bands[index] if index < len(bands) else None)
+        self.top_count.setValue(plan.top_count)
+        self.top_share.setValue(round(plan.top_share * 100))
 
         self._on_enabled(plan.enabled)
         self._refresh_preview()
@@ -427,8 +347,9 @@ class RewardsPanel(QWidget):
             tier_count=max(1, self.tier_count()),
             reward_pool=float(self.pool.value()),
             currency=self.currency.text().strip() or "Cr",
-            reward_bands=[row.to_band() for row in self.band_rows if row.is_active()],
+            top_count=int(self.top_count.value()),
+            top_share=self.top_share.value() / 100.0,
         )
 
 
-__all__ = ["BAND_MODES", "GoalTierRow", "RewardBandRow", "RewardsPanel"]
+__all__ = ["GoalTierRow", "RewardsPanel"]

@@ -238,7 +238,13 @@ jobs:
           }
           Write-Host "OK"
 
+      # A tagged run produces the archives that become release assets.
+      # A manual run does not: GitHub always zips whatever an artefact
+      # step uploads, so building a tar.gz first hands Linux users a
+      # tarball inside a zip for no reason. Uploading the files loose
+      # makes GitHub's own zip the archive.
       - name: Package artefacts
+        if: github.ref_type == 'tag'
         shell: bash
         run: |
           set -euo pipefail
@@ -270,6 +276,23 @@ jobs:
             fi
           done
           ls -la
+
+      - name: Collect artefacts (manual run)
+        if: github.ref_type != 'tag'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            cp "dist/${{ matrix.binary }}.exe" out/
+          elif [ -d "dist/${{ matrix.binary }}.app" ]; then
+            cp -R "dist/${{ matrix.binary }}.app" out/
+          else
+            cp "dist/${{ matrix.binary }}" out/
+          fi
+          cp LICENSE THIRD-PARTY-NOTICES.md out/
+          cp -R licenses out/
+          ls -la out
 
       - uses: actions/upload-artifact@v4
         with:

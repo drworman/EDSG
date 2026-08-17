@@ -304,18 +304,13 @@ def test_the_rewards_tab_sits_between_criteria_and_issue(qt_app, tmp_path, monke
 
 def test_tier_thresholds_follow_the_criteria(qt_app):
     """Unticking a tier rebalances the rest, and nothing is typed."""
-    from edsg.core.tiers import TierPlan, default_reward_bands
+    from edsg.core.tiers import TierPlan
     from edsg.gui.rewards_panel import RewardsPanel
 
     panel = RewardsPanel()
     try:
         panel.load(
-            TierPlan(
-                enabled=True,
-                tier_count=5,
-                reward_pool=500,
-                reward_bands=default_reward_bands(),
-            ),
+            TierPlan(enabled=True, tier_count=5, reward_pool=500),
             2000.0,
         )
         # Listed from the top down.
@@ -334,13 +329,13 @@ def test_tier_thresholds_follow_the_criteria(qt_app):
 
 
 def test_at_least_one_goal_tier_always_remains(qt_app):
-    from edsg.core.tiers import TierPlan, default_reward_bands
+    from edsg.core.tiers import TierPlan
     from edsg.gui.rewards_panel import RewardsPanel
 
     panel = RewardsPanel()
     try:
         panel.load(
-            TierPlan(enabled=True, reward_pool=10, reward_bands=default_reward_bands()),
+            TierPlan(enabled=True, reward_pool=10),
             1000.0,
         )
         for row in panel.tier_rows:
@@ -348,3 +343,69 @@ def test_at_least_one_goal_tier_always_remains(qt_app):
         assert panel.tier_count() >= 1
     finally:
         panel.deleteLater()
+
+
+# -- submission filenames ----------------------------------------------
+
+
+def test_a_submission_is_named_for_its_event_and_commander():
+    """A commander in several events, or running two accounts, must not
+    overwrite their own file."""
+    from edsg.core.models import Submission
+
+    submission = Submission(
+        event_id="x",
+        invitation_fingerprint="y",
+        event_name="20260817 Mining Drive Test",
+        commander_fid="F10467336",
+        commander_name="HUGH JASSOLE",
+    )
+    assert submission.filename() == (
+        "20260817-Mining-Drive-Test-F10467336-HUGH-JASSOLE.edsgs"
+    )
+
+
+def test_awkward_names_still_produce_a_usable_filename():
+    from edsg.core.models import Submission
+
+    submission = Submission(
+        event_id="x",
+        invitation_fingerprint="y",
+        event_name="Test Event #1",
+        commander_fid="F1",
+        commander_name="KO'ATL",
+    )
+    name = submission.filename()
+    assert name == "Test-Event-1-F1-KO-ATL.edsgs"
+    assert "--" not in name
+
+
+def test_two_events_do_not_collide():
+    from edsg.core.models import Submission
+
+    def named(event: str) -> str:
+        return Submission(
+            event_id="x",
+            invitation_fingerprint="y",
+            event_name=event,
+            commander_fid="F1",
+            commander_name="A",
+        ).filename()
+
+    assert named("First Event") != named("Second Event")
+
+
+# -- the criterion dialog layout ---------------------------------------
+
+
+def test_the_scoring_fields_share_one_width(qt_app):
+    """The Unit Cap was too narrow to read a five-figure number in."""
+    from edsg.gui.criterion_dialog import FIELD_WIDTH, CriterionDialog
+
+    dialog = CriterionDialog(None, None)
+    try:
+        assert dialog.cap_field.width() == FIELD_WIDTH
+        assert dialog.minimum_field.width() == FIELD_WIDTH
+        assert dialog.points_spin.width() == FIELD_WIDTH
+    finally:
+        dialog.deleteLater()

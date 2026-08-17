@@ -197,8 +197,10 @@ def participate(
 
     envelope = sign_document(identity, DOC_TYPE_SUBMISSION, submission.to_dict())
 
+    # Named by the submission itself, so the event and commander appear
+    # in the filename rather than a bare Frontier ID.
     path = _resolve_output(
-        destination, SUBMISSION_SUFFIX, commander.safe_filename_stem()
+        destination, SUBMISSION_SUFFIX, submission.filename()[: -len(SUBMISSION_SUFFIX)]
     )
     _write_json(path, envelope)
     return path, submission, membership

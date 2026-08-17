@@ -362,14 +362,20 @@ class ParticipantWindow(QMainWindow):
         )
 
         goal = ""
-        if event.tiers.enabled and event.tiers.target > 0:
+        if event.tiers.enabled:
             plan = event.tiers
-            bands = ", ".join(band.label for band in plan.reward_bands)
             goal = (
                 f'<p class="k">This is a squadron goal: everyone\u2019s '
-                f"points add toward <b>{plan.target:,.0f}</b>, across "
-                f"{len(plan.goal_tiers)} tier(s)."
-                + (f" Reward tiers: {bands}." if bands else "")
+                f"points add into one total across {plan.tier_count} "
+                f"tier(s)."
+                + (
+                    f" Up to <b>{plan.reward_pool:,.0f} {plan.currency}</b> "
+                    f"is shared out by contribution, with "
+                    f"{plan.top_share * 100:g}% of it going to the top "
+                    f"{plan.top_count}."
+                    if plan.reward_pool
+                    else ""
+                )
                 + "</p>"
             )
         description = (
