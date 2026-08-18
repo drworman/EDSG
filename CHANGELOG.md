@@ -19,6 +19,26 @@ the encoding signatures are computed over.
 ## [20260817]
 
 ### Changed
+- **Numbers are written the way a person would read them.** Python's
+  `%g` formatting reaches for scientific notation well inside the range
+  Elite deals in, so a criterion capped at a million was shown to
+  organizers and printed in reports as `1e+06`. Exact figures now carry
+  thousands separators throughout, and where space is genuinely short a
+  value abbreviates as `1.25M`, `7B` or `3.2K` rather than being cut off.
+- **The PDF report is paginated by subject.** Page 1 is the event summary
+  with the squadron branding and the scoring criteria; page 2 is goal
+  progress; page 3 is the rewards; the standings and supporting detail
+  follow. A printed copy can be handed round in parts.
+- **The goal tier table lists the highest tier first.** A squadron climbs
+  toward the top tier, so reading down the table should be reading back
+  down the ladder.
+- **The tie-break control is gone from the Event tab.** Commanders on
+  equal points share a rank and are paid alike, so there was nothing left
+  to choose.
+- File dialogs are legible under every theme. Qt draws the back, forward
+  and parent-directory arrows with its own dark pixmaps, which all but
+  vanished against a dark background; those buttons now sit on a raised
+  surface with a border and visible hover and pressed states.
 - **Rewards are shared out in proportion to contribution.** The reward
   tier brackets are gone. An organizer now sets two figures — how many
   leading commanders share a bonus, and how much of the pool that bonus

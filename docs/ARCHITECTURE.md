@@ -23,6 +23,7 @@ src/edsg/
 │   ├── allocation.py     Filling unit caps in the order work happened
 │   ├── commodities.py    Reconciling every spelling of a commodity name
 │   ├── namecheck.py      Advisory system and station lookups via Spansh
+│   ├── numbers.py        Readable formatting, never scientific notation
 │   ├── palettes.py       Theme colours, with derived, contrast-checked tones
 │   ├── paths.py          Per-role config dirs, journal discovery, workspace
 │   ├── settings.py       Appearance and branding, shared by both binaries

@@ -409,3 +409,71 @@ def test_the_scoring_fields_share_one_width(qt_app):
         assert dialog.points_spin.width() == FIELD_WIDTH
     finally:
         dialog.deleteLater()
+
+
+# -- the tie-break control is gone -------------------------------------
+
+
+def test_the_organizer_offers_no_tie_break_control(qt_app, tmp_path, monkeypatch):
+    """Ties now share a rank and are paid alike, so there is nothing
+    left for an organizer to choose."""
+    monkeypatch.setenv("EDSG_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("EDSG_HOME", str(tmp_path / "home"))
+    from edsg.gui.organizer import OrganizerWindow
+
+    window = OrganizerWindow()
+    try:
+        assert not hasattr(window, "tie_box")
+    finally:
+        window.deleteLater()
+
+
+# -- the report is self-contained --------------------------------------
+
+
+def test_the_html_report_references_nothing_external(tmp_path):
+    """It is mailed and uploaded, so it has to stand on its own."""
+    import re
+
+    from edsg.core.models import EventDefinition
+    from edsg.core.settings import Appearance, Branding, Settings
+    from edsg.core.standings import StandingsReport
+    from edsg.reports.html_report import build_html
+    from edsg.reports.style import ReportStyle
+
+    logo = tmp_path / "logo.png"
+    logo.write_bytes(
+        bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+            "890000000a49444154789c63000100000500010d0a2db40000000049454e44ae"
+            "426082"
+        )
+    )
+    style = ReportStyle.from_settings(
+        Settings(
+            appearance=Appearance(theme="default"),
+            branding=Branding(
+                squadron_name="Empyrean Foundation",
+                squadron_tag="EMPY",
+                logo_path=str(logo),
+            ),
+        )
+    )
+    html = build_html(
+        StandingsReport(
+            event=EventDefinition(name="X"),
+            standings=[],
+            accepted=[],
+            rejected=[],
+        ),
+        style,
+    )
+
+    assert "Empyrean Foundation [EMPY]" in html
+    assert 'src="data:image/png;base64,' in html
+    external = [
+        url
+        for url in re.findall(r'(?:src|href)="([^"]+)"', html)
+        if not url.startswith(("data:", "#"))
+    ]
+    assert not external, f"references outside the file: {external}"

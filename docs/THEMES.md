@@ -93,6 +93,13 @@ in the HTML but not the PDF is worse than one that appears in neither.
 A missing or unreadable logo is skipped silently: moving the image must not
 stop a report generating.
 
+## Dialogs
+
+The theme covers Qt's own windows too — file choosers in particular. Qt draws
+their navigation arrows with its own dark pixmaps, which are close to
+invisible on a dark background, so those buttons are given a raised surface
+and a border under every theme.
+
 ## What each format does with the theme
 
 | Format | Behaviour |

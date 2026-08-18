@@ -11,6 +11,7 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 
+from edsg.core.numbers import percentage
 from edsg.core.standings import StandingsReport
 from edsg.reports.common import MEDALS, format_points, format_units, summary_lines
 from edsg.reports.style import ReportStyle
@@ -387,7 +388,7 @@ def _progress_board(report: StandingsReport) -> str:
                 f"<tr><td class='band'>Top {len(top)} bonus</td>"
                 f"<td class='num payout'>"
                 f"{progress.pool * plan.top_share:,.0f}</td>"
-                f"<td>{plan.top_share * 100:g}% of the pool, shared among "
+                f"<td>{percentage(plan.top_share)} of the pool, shared among "
                 f"the top {len(top)} by contribution</td></tr>"
             )
         summary_rows.append(

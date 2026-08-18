@@ -20,6 +20,7 @@ from enum import StrEnum
 from typing import Any
 
 from edsg.core.errors import CriteriaError
+from edsg.core.numbers import quantity
 
 
 class MetricKind(StrEnum):
@@ -408,11 +409,11 @@ class Criterion:
         detail = "; ".join(self.filters.describe())
         if detail:
             base = f"{base} ({detail})"
-        scoring = f"{self.points_per_unit:g} pt/unit"
+        scoring = f"{quantity(self.points_per_unit)} pt/unit"
         if self.unit_cap is not None:
-            scoring += f", unit cap {self.unit_cap:g}"
+            scoring += f", unit cap {quantity(self.unit_cap)}"
         if self.minimum_units is not None:
-            scoring += f", {self.minimum_units:g} minimum per CMDR"
+            scoring += f", {quantity(self.minimum_units)} minimum per CMDR"
         return f"{base} — {scoring}"
 
     def validate(self) -> list[str]:
@@ -451,8 +452,8 @@ class Criterion:
             and self.minimum_units > self.unit_cap
         ):
             problems.append(
-                f"{self.label}: minimum ({self.minimum_units:g}) exceeds the "
-                f"cap ({self.unit_cap:g}), so it can never score."
+                f"{self.label}: minimum ({quantity(self.minimum_units)}) exceeds the "
+                f"cap ({quantity(self.unit_cap)}), so it can never score."
             )
         for outcome in self.filters.mission_outcomes:
             valid = {item.value for item in MissionOutcome}

@@ -37,8 +37,9 @@ The tiers below it step down in equal shares. Untick the ones you do not want
 | 4 | 25% | 4,000 · 8,000 · 12,000 · 16,000 |
 | 3 | 33% | 5,333 · 10,667 · 16,000 |
 
-Tiers are listed from the top down, the way a goal is read. **Five is the
-maximum**, matching Frontier.
+Tiers are listed **highest first**, in the organizer and in the reports: a
+squadron climbs toward the top tier, so reading downward reads back down the
+ladder. **Five is the maximum**, matching Frontier.
 
 **Tier 1 is the floor.** If the squadron does not reach it, no rewards are
 paid at all — the event did not achieve what it set out to.
@@ -150,8 +151,12 @@ Every format carries the board:
 
 - **HTML** — the tier readout, a meter with each threshold marked and reached
   tiers picked out, how far the next tier is, a summary of how the pool
-  splits, and the full distribution matrix.
-- **PDF** — the same, drawn to print cleanly in black and white.
+  splits, and the full distribution matrix. Entirely self-contained: the
+  stylesheet is inline and the squadron logo is embedded, so the file can be
+  mailed or uploaded without carrying anything alongside it.
+- **PDF** — the same, drawn to print cleanly in black and white, and
+  paginated by subject: the event summary and criteria on page 1, goal
+  progress on page 2, rewards on page 3, then the standings.
 - **Markdown** — a text meter that pastes into Discord, with a
   who-receives-what table.
 - **JSON** — the whole structure under a `progress` key, for a bot or site.

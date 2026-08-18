@@ -36,6 +36,7 @@ from edsg.core.criteria import (
     MissionOutcome,
 )
 from edsg.core.namecheck import check_names, failure_detail, summarise
+from edsg.core.numbers import quantity
 from edsg.gui.widgets import (
     CheckRow,
     TagField,
@@ -398,10 +399,10 @@ class CriterionDialog(QDialog):
 
         self.points_spin.setValue(criterion.points_per_unit)
         self.cap_field.setText(
-            "" if criterion.unit_cap is None else f"{criterion.unit_cap:g}"
+            "" if criterion.unit_cap is None else quantity(criterion.unit_cap)
         )
         self.minimum_field.setText(
-            "" if criterion.minimum_units is None else f"{criterion.minimum_units:g}"
+            "" if criterion.minimum_units is None else quantity(criterion.minimum_units)
         )
         self.notes_field.setPlainText(criterion.notes)
 

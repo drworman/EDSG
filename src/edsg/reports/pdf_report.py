@@ -29,6 +29,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from edsg.core.numbers import plain
 from edsg.core.standings import StandingsReport
 from edsg.reports.common import format_points, format_units, summary_lines
 from edsg.reports.style import ReportStyle
@@ -261,12 +262,14 @@ def _progress_flowables(report: StandingsReport, styles, accent) -> list:
             Paragraph("<b>Reached</b>", styles["cell"]),
         ]
     ]
-    for index, tier in enumerate(progress.goal_tiers, start=1):
-        reached = "yes" if index <= progress.tiers_reached else "\u2014"
+    # Listed highest first: a squadron climbs toward the top tier, so
+    # reading downward should be reading back down the ladder.
+    for index, tier in reversed(list(enumerate(progress.goal_tiers, start=1))):
+        reached = "reached" if index <= progress.tiers_reached else "\u2014"
         rows.append(
             [
                 Paragraph(escape(tier.label), styles["cell"]),
-                Paragraph(f"{tier.threshold:,.0f}", styles["cell"]),
+                Paragraph(plain(tier.threshold, 0), styles["cell"]),
                 Paragraph(reached, styles["cell"]),
             ]
         )
@@ -274,6 +277,17 @@ def _progress_flowables(report: StandingsReport, styles, accent) -> list:
     table.setStyle(_table_style(accent))
     flowables.append(table)
 
+    return flowables
+
+
+def _rewards_flowables(report: StandingsReport, styles, accent) -> list:
+    """Render who is owed what, on its own page."""
+    progress = report.progress()
+    if progress is None or not progress.plan.reward_pool:
+        return []
+
+    plan = progress.plan
+    flowables: list = []
     flowables.append(Paragraph("Rewards", styles["heading"]))
     if not progress.rewards_unlocked:
         flowables.append(
@@ -553,12 +567,32 @@ def write_pdf(
     if event.description and event.description != event.name:
         story.append(Paragraph(escape(event.description), styles["tagline"]))
 
+    # One subject per page, in the order somebody reads the report:
+    # what the event was, how the goal went, who is owed what, then the
+    # standings and the supporting detail. Each section starts on a
+    # fresh page so a printed copy can be handed round in parts.
     story.extend(_summary_flowables(report, styles, accent))
-    story.extend(_progress_flowables(report, styles, accent))
-    story.extend(_standings_flowables(report, styles, accent))
-    story.append(PageBreak())
     story.extend(_criteria_flowables(report, styles, accent))
-    story.extend(_rejected_flowables(report, styles, accent))
+
+    progress = _progress_flowables(report, styles, accent)
+    if progress:
+        story.append(PageBreak())
+        story.extend(progress)
+
+    rewards = _rewards_flowables(report, styles, accent)
+    if rewards:
+        story.append(PageBreak())
+        story.extend(rewards)
+
+    story.append(PageBreak())
+    story.extend(_standings_flowables(report, styles, accent))
+
+    rejected = _rejected_flowables(report, styles, accent)
+    if rejected:
+        story.append(PageBreak())
+        story.extend(rejected)
+
+    story.append(PageBreak())
     story.extend(_audit_flowables(report, styles, accent))
 
     document.build(story, onFirstPage=_footer, onLaterPages=_footer)

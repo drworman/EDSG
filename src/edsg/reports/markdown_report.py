@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from edsg.core.numbers import percentage
 from edsg.core.standings import StandingsReport
 from edsg.reports.common import (
     MEDALS,
@@ -112,7 +113,7 @@ def build_markdown(report: StandingsReport, style: ReportStyle | None = None) ->
             lines.append("")
             if top and plan.top_share:
                 lines.append(
-                    f"{plan.top_share * 100:g}% goes to the top "
+                    f"{percentage(plan.top_share)} goes to the top "
                     f"{len(top)} by contribution; the rest is shared among "
                     f"all {progress.participants} contributor(s) by "
                     f"contribution."

@@ -45,6 +45,7 @@ from edsg.core.models import (
     Eligibility,
     Submission,
 )
+from edsg.core.numbers import percentage
 from edsg.core.paths import (
     ROLE_PARTICIPANT,
     app_root,
@@ -371,7 +372,7 @@ class ParticipantWindow(QMainWindow):
                 + (
                     f" Up to <b>{plan.reward_pool:,.0f} {plan.currency}</b> "
                     f"is shared out by contribution, with "
-                    f"{plan.top_share * 100:g}% of it going to the top "
+                    f"{percentage(plan.top_share)} of it going to the top "
                     f"{plan.top_count}."
                     if plan.reward_pool
                     else ""

@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
-    QComboBox,
     QDateTimeEdit,
     QFileDialog,
     QFormLayout,
@@ -49,8 +48,8 @@ from edsg.core.models import (
     EventDefinition,
     EventState,
     EventWindow,
-    TieBreak,
 )
+from edsg.core.numbers import quantity
 from edsg.core.paths import (
     ROLE_ORGANIZER,
     EventPaths,
@@ -103,12 +102,6 @@ DRAFT_SUFFIX = ".edsgevent"
 AUTOSAVE_NAME = f"event{DRAFT_SUFFIX}"
 
 ROLE = "Organizer"
-
-TIE_BREAK_LABELS = {
-    TieBreak.EARLIEST_SUBMISSION: "Earliest submission wins",
-    TieBreak.MOST_CRITERIA_SCORED: "Most criteria scored wins",
-    TieBreak.ALPHABETICAL: "Alphabetical by commander name",
-}
 
 
 class OrganizerWindow(QMainWindow):
@@ -405,13 +398,8 @@ class OrganizerWindow(QMainWindow):
         )
         layout.addWidget(eligibility)
 
-        ranking = QGroupBox("Ranking")
-        ranking_form = QFormLayout(ranking)
-        self.tie_box = QComboBox()
-        for tie, text in TIE_BREAK_LABELS.items():
-            self.tie_box.addItem(text, tie)
-        ranking_form.addRow("Break ties by", self.tie_box)
-        layout.addWidget(ranking)
+        # No tie-break control: commanders on equal points now share a
+        # rank and are paid alike, so there is nothing left to break.
         layout.addStretch(1)
         return tab
 
@@ -707,7 +695,6 @@ class OrganizerWindow(QMainWindow):
         # Always squadron-locked; there is no longer an open option.
         self.event_def.eligibility = Eligibility.SQUADRON
         # Qt hands back a plain str for StrEnum user data; convert it.
-        self.event_def.tie_break = TieBreak(self.tie_box.currentData())
 
     def _populate(self) -> None:
         if hasattr(self, "rewards_panel"):
@@ -729,9 +716,6 @@ class OrganizerWindow(QMainWindow):
         if window.end:
             self.end_edit.setDateTime(_to_qt(window.end))
 
-        index = self.tie_box.findData(self.event_def.tie_break)
-        if index >= 0:
-            self.tie_box.setCurrentIndex(index)
         self._refresh()
 
     # -- refresh ---------------------------------------------------------
@@ -779,11 +763,11 @@ class OrganizerWindow(QMainWindow):
 
         self.criteria_tree.clear()
         for criterion in self.event_def.criteria:
-            scoring = f"{criterion.points_per_unit:g} pt/unit"
+            scoring = f"{quantity(criterion.points_per_unit)} pt/unit"
             if criterion.unit_cap is not None:
-                scoring += f" \u00b7 cap {criterion.unit_cap:g}"
+                scoring += f" \u00b7 cap {quantity(criterion.unit_cap)}"
             if criterion.minimum_units is not None:
-                scoring += f" \u00b7 min {criterion.minimum_units:g}"
+                scoring += f" \u00b7 min {quantity(criterion.minimum_units)}"
             item = QTreeWidgetItem(
                 [
                     criterion.label,
@@ -836,7 +820,6 @@ class OrganizerWindow(QMainWindow):
                     if self.event_def.tiers.enabled
                     else "no rewards \u2014 plain leaderboard",
                 ),
-                ("Tie-break", TIE_BREAK_LABELS[self.event_def.tie_break]),
             ]
             rows = "".join(
                 f'<tr><td class="good">\u2713</td>'

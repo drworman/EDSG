@@ -218,6 +218,44 @@ QTreeWidget::item:selected, QTableWidget::item:selected, QListWidget::item:selec
     background-color: {c["accent_dim"]};
     color: #ffffff;
 }}
+/* File dialogs and other Qt-supplied windows.
+
+   Qt draws the back, forward and parent-directory arrows with the
+   style's own pixmaps, which are dark grey and all but vanish against a
+   dark background. Giving the buttons a raised surface and a border puts
+   something legible behind them, and the hover and pressed states make
+   it obvious they are controls at all. */
+QToolButton {{
+    background: {c["surface_alt"]};
+    border: 1px solid {c["line"]};
+    border-radius: 3px;
+    padding: 3px;
+    margin: 1px;
+    min-width: 22px;
+    min-height: 22px;
+}}
+QToolButton:hover {{
+    background: {c["surface_hi"]};
+    border-color: {c["accent"]};
+}}
+QToolButton:pressed {{ background: {c["accent_dim"]}; }}
+QToolButton:disabled {{
+    background: {c["surface"]};
+    border-color: {c["line_soft"]};
+}}
+QToolButton::menu-indicator {{ image: none; }}
+
+/* The sidebar of shortcuts, and the file list itself. */
+QListView, QTreeView {{
+    background: {c["surface"]};
+    alternate-background-color: {c["line_soft"]};
+}}
+QFileDialog QListView::item:selected,
+QFileDialog QTreeView::item:selected {{
+    background: {c["accent_dim"]};
+    color: {c["text"]};
+}}
+
 QHeaderView::section {{
     background-color: {c["surface_alt"]};
     color: {c["text_faint"]};
