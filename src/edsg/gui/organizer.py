@@ -49,7 +49,11 @@ from edsg.core.models import (
     EventState,
     EventWindow,
 )
-from edsg.core.numbers import quantity
+
+# The list column is narrow, so the short form is used where it is
+# exact. Reports keep the full figure, where precision matters more
+# than brevity.
+from edsg.core.numbers import editable
 from edsg.core.paths import (
     ROLE_ORGANIZER,
     EventPaths,
@@ -763,11 +767,11 @@ class OrganizerWindow(QMainWindow):
 
         self.criteria_tree.clear()
         for criterion in self.event_def.criteria:
-            scoring = f"{quantity(criterion.points_per_unit)} pt/unit"
+            scoring = f"{editable(criterion.points_per_unit)} pt/unit"
             if criterion.unit_cap is not None:
-                scoring += f" \u00b7 cap {quantity(criterion.unit_cap)}"
+                scoring += f" \u00b7 cap {editable(criterion.unit_cap)}"
             if criterion.minimum_units is not None:
-                scoring += f" \u00b7 min {quantity(criterion.minimum_units)}"
+                scoring += f" \u00b7 min {editable(criterion.minimum_units)}"
             item = QTreeWidgetItem(
                 [
                     criterion.label,

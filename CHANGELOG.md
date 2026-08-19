@@ -70,6 +70,20 @@ the encoding signatures are computed over.
   number in.
 
 ### Fixed
+- **A criterion could not be reopened and saved.** Adding thousands
+  separators to the Unit Cap and Minimum fields made them unreadable to
+  their own parser, so editing an existing criterion failed with "must be
+  a number". Numeric fields now show a readable form — `1B`, `250K`, or
+  the grouped figure — and accept any of those forms back, plain or
+  grouped or short.
+
+  The short form is used only where it is exact: a cap of 1,234,567 is
+  shown in full rather than as `1.23M`, so opening a criterion and saving
+  it cannot quietly round what was set. The reward pool field behaves the
+  same way.
+- **Small values were rounded away when displayed.** A points-per-unit of
+  0.001 was formatted as `0.00`, which would have destroyed the value on
+  the next save. Fractional figures now keep their precision.
 - **Commodity filters silently missed most commodities.** Elite writes the
   same commodity three ways: `$lowtemperaturediamond_name;` internally,
   "Low Temp. Diamonds" localised, and an organizer types "Low Temperature

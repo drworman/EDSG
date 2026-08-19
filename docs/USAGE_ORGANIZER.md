@@ -101,6 +101,11 @@ against Spansh** button for exactly this. It is advisory: Spansh does not know
 every name, and being offline says nothing about your spelling, so EDSG never
 blocks on it.
 
+**Numbers can be written however you like.** `1000000`, `1,000,000` and `1M`
+all mean the same thing in any numeric field, and values are shown back in
+whichever form reads best without losing precision — a cap of 250,000 shows
+as `250K`, one of 1,234,567 stays in full.
+
 **Every criterion needs a Unit Cap.** It is what the criterion races for: the
 total units it is worth across everybody, filled in the order the work
 happened. Once full, later work earns nothing. The caps together decide what

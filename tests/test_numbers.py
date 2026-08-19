@@ -40,14 +40,95 @@ def test_nothing_ever_renders_as_an_exponent(value):
 
 def test_plain_keeps_the_exact_figure():
     assert plain(1_000_000) == "1,000,000"
-    assert plain(1234.5) == "1,234.50"
+    assert plain(1234.5) == "1,234.5"
     assert plain(1234.0) == "1,234"
     assert plain(1234.567, 1) == "1,234.6"
 
 
+def test_plain_does_not_round_a_small_value_away():
+    """Rounding to two places destroyed a points-per-unit of 0.001."""
+    assert plain(0.001) == "0.001"
+    assert plain(0.000001) == "0.000001"
+
+
 def test_quantity_drops_a_pointless_decimal():
     assert quantity(2000.0) == "2,000"
-    assert quantity(0.5) == "0.50"
+    assert quantity(0.5) == "0.5"
+
+
+# -- reading numbers back ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("1,000,000", 1_000_000),
+        ("1 000 000", 1_000_000),
+        ("1000000", 1_000_000),
+        ("250K", 250_000),
+        ("4.3k", 4_300),
+        ("1B", 1_000_000_000),
+        ("1.5T", 1_500_000_000_000),
+        ("0.5", 0.5),
+        ("-2.4M", -2_400_000),
+    ],
+)
+def test_a_number_can_be_read_back_however_it_was_written(text, expected):
+    from edsg.core.numbers import parse
+
+    assert parse(text) == expected
+
+
+def test_an_empty_field_is_not_a_number_nor_an_error():
+    from edsg.core.numbers import parse
+
+    assert parse("") is None
+    assert parse("   ") is None
+
+
+@pytest.mark.parametrize("text", ["abc", "M", "1,2,x", "--5", "1.2.3"])
+def test_text_that_is_not_a_number_is_refused(text):
+    from edsg.core.numbers import parse
+
+    with pytest.raises(ValueError, match="not a number"):
+        parse(text)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        0,
+        987,
+        2000,
+        4300,
+        250_000,
+        1_000_000,
+        1_234_567,
+        12_500_000,
+        1_000_000_000,
+        0.5,
+        0.001,
+        1234.5,
+    ],
+)
+def test_what_a_field_shows_reads_back_as_the_same_number(value):
+    """A criterion opened and saved unchanged must keep its value.
+
+    Showing a rounded figure in an editable field silently rewrites the
+    number the moment the organizer saves.
+    """
+    from edsg.core.numbers import editable, parse
+
+    assert parse(editable(value)) == value
+
+
+def test_the_short_form_is_preferred_when_it_is_exact():
+    from edsg.core.numbers import editable
+
+    assert editable(1_000_000_000) == "1B"
+    assert editable(250_000) == "250K"
+    # Not exact as a short form, so the grouped figure is used instead.
+    assert editable(1_234_567) == "1,234,567"
 
 
 @pytest.mark.parametrize(

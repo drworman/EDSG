@@ -36,7 +36,8 @@ from edsg.core.criteria import (
     MissionOutcome,
 )
 from edsg.core.namecheck import check_names, failure_detail, summarise
-from edsg.core.numbers import quantity
+from edsg.core.numbers import editable
+from edsg.core.numbers import parse as parse_number
 from edsg.gui.widgets import (
     CheckRow,
     TagField,
@@ -252,7 +253,9 @@ class CriterionDialog(QDialog):
         self.cap_field.setFixedWidth(FIELD_WIDTH)
         self.cap_field.setToolTip(
             "How many units this criterion is worth in total, across "
-            "everybody. Required."
+            "everybody. Required.\n\n"
+            "Write it plainly (1000000), grouped (1,000,000) or short "
+            "(1M) \u2014 all three are read the same way."
         )
         form.addRow("Unit Cap", self.cap_field)
         form.addRow(
@@ -272,7 +275,8 @@ class CriterionDialog(QDialog):
         self.minimum_field.setFixedWidth(FIELD_WIDTH)
         self.minimum_field.setToolTip(
             "Units a single commander must reach before any of their work "
-            "here scores. Optional."
+            "here scores. Optional.\n\n"
+            "Plain, grouped or short forms are all accepted."
         )
         form.addRow("Minimum per CMDR", self.minimum_field)
         form.addRow(
@@ -398,23 +402,27 @@ class CriterionDialog(QDialog):
             del name
 
         self.points_spin.setValue(criterion.points_per_unit)
-        self.cap_field.setText(
-            "" if criterion.unit_cap is None else quantity(criterion.unit_cap)
-        )
-        self.minimum_field.setText(
-            "" if criterion.minimum_units is None else quantity(criterion.minimum_units)
-        )
+        self.cap_field.setText(editable(criterion.unit_cap))
+        self.minimum_field.setText(editable(criterion.minimum_units))
         self.notes_field.setPlainText(criterion.notes)
 
     @staticmethod
     def _optional_float(field: QLineEdit, name: str) -> float | None:
-        text = field.text().strip()
-        if not text:
-            return None
+        """Read a number from a field, accepting what was shown in it.
+
+        The field displays values in a readable form — ``250K``,
+        ``1,000,000`` — so the parser has to take those back. Rejecting
+        the value the field itself put there made a criterion impossible
+        to reopen and edit.
+        """
         try:
-            return float(text)
+            return parse_number(field.text())
         except ValueError as exc:
-            raise ValueError(f"{name} must be a number, not '{text}'.") from exc
+            raise ValueError(
+                f"{name} must be a number, not '{field.text().strip()}'. "
+                f"You can write it plainly (1000000), grouped "
+                f"(1,000,000) or short (1M)."
+            ) from exc
 
     def _check_names(self) -> None:
         """Look the typed system and station names up on Spansh.

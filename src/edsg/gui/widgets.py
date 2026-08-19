@@ -17,11 +17,12 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QDesktopServices, QTextCursor
+from PySide6.QtGui import QDesktopServices, QTextCursor, QValidator
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -35,6 +36,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from edsg.core.numbers import editable
+from edsg.core.numbers import parse as parse_number
 from edsg.gui.theme import COLOURS, mono_font
 from edsg.version import read_version
 
@@ -131,6 +134,35 @@ def wait_for_workers(timeout_ms: int = 10_000) -> bool:
 # --------------------------------------------------------------------- #
 # Small widgets
 # --------------------------------------------------------------------- #
+
+
+class ReadableSpinBox(QDoubleSpinBox):
+    """A spin box that shows large numbers the way people write them.
+
+    Displays ``1B`` or ``250K`` where that is exact, and the grouped
+    figure otherwise, so a value can never be quietly rounded by being
+    displayed. Typing any of those forms back in works.
+    """
+
+    def textFromValue(self, value: float) -> str:  # noqa: N802 - Qt API
+        return editable(value)
+
+    def valueFromText(self, text: str) -> float:  # noqa: N802 - Qt API
+        try:
+            parsed = parse_number(text)
+        except ValueError:
+            return self.value()
+        return parsed if parsed is not None else 0.0
+
+    def validate(self, text: str, position: int):
+        """Accept anything the parser can read, plus partial input."""
+        if not text.strip():
+            return (QValidator.Intermediate, text, position)
+        try:
+            parse_number(text)
+        except ValueError:
+            return (QValidator.Intermediate, text, position)
+        return (QValidator.Acceptable, text, position)
 
 
 def label(text: str, role: str = "", wrap: bool = False) -> QLabel:
@@ -452,6 +484,7 @@ __all__ = [
     "LabelledField",
     "LogPane",
     "PathPicker",
+    "ReadableSpinBox",
     "TagField",
     "Worker",
     "WorkerSignals",

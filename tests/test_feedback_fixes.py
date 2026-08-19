@@ -477,3 +477,94 @@ def test_the_html_report_references_nothing_external(tmp_path):
         if not url.startswith(("data:", "#"))
     ]
     assert not external, f"references outside the file: {external}"
+
+
+# -- a criterion can be reopened and saved ------------------------------
+
+
+@pytest.mark.parametrize(
+    ("cap", "minimum"),
+    [
+        (1_000_000, 1_000),
+        (1_234_567, 25),
+        (250_000, None),
+        (1_000_000_000, 12_500_000),
+        (200, 10),
+    ],
+)
+def test_reopening_a_criterion_and_saving_keeps_its_numbers(qt_app, cap, minimum):
+    """Grouping the displayed figure made the field unreadable to its own
+    parser: reopening a criterion and saving it threw 'must be a number'.
+    """
+    from edsg.core.criteria import Criterion, Measure, MetricKind
+    from edsg.gui.criterion_dialog import CriterionDialog
+
+    original = Criterion(
+        criterion_id="x",
+        label="Test",
+        kind=MetricKind.MINING_REFINED,
+        measure=Measure.TONNAGE,
+        points_per_unit=1.0,
+        unit_cap=cap,
+        minimum_units=minimum,
+    )
+    dialog = CriterionDialog(None, original)
+    try:
+        dialog._save()
+        saved = dialog.result_criterion
+        assert saved is not None, "saving a valid criterion was refused"
+        assert saved.unit_cap == cap
+        assert saved.minimum_units == minimum
+    finally:
+        dialog.deleteLater()
+
+
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [("1M", 1_000_000), ("2,500", 2_500), ("4.3K", 4_300), ("1B", 1e9)],
+)
+def test_a_cap_can_be_typed_in_any_readable_form(qt_app, typed, expected):
+    from edsg.core.criteria import Criterion, Measure, MetricKind
+    from edsg.gui.criterion_dialog import CriterionDialog
+
+    dialog = CriterionDialog(
+        None,
+        Criterion(
+            criterion_id="x",
+            label="Test",
+            kind=MetricKind.MINING_REFINED,
+            measure=Measure.TONNAGE,
+            points_per_unit=1.0,
+            unit_cap=1,
+        ),
+    )
+    try:
+        dialog.cap_field.setText(typed)
+        dialog._save()
+        assert dialog.result_criterion is not None
+        assert dialog.result_criterion.unit_cap == expected
+    finally:
+        dialog.deleteLater()
+
+
+def test_the_reward_pool_reads_and_writes_short_forms(qt_app):
+    from edsg.gui.widgets import ReadableSpinBox
+
+    spin = ReadableSpinBox()
+    try:
+        spin.setDecimals(0)
+        spin.setRange(0, 1_000_000_000_000)
+
+        spin.setValue(1_000_000_000)
+        assert spin.text() == "1B"
+        # Not exact as a short form, so the full figure is shown instead
+        # of quietly rounding what the organizer set.
+        spin.setValue(1_234_567)
+        assert spin.text() == "1,234,567"
+
+        for typed, expected in (("1B", 1e9), ("250K", 250_000), ("1,000,000", 1e6)):
+            spin.lineEdit().setText(typed)
+            spin.interpretText()
+            assert spin.value() == expected
+    finally:
+        spin.deleteLater()

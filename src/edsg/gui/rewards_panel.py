@@ -21,7 +21,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QGroupBox,
@@ -35,7 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from edsg.core.tiers import MAX_GOAL_TIERS, TierPlan
-from edsg.gui.widgets import label
+from edsg.gui.widgets import ReadableSpinBox, label
 
 #: Column widths shared by the headings and the rows beneath them, so a
 #: heading always sits over the control it names.
@@ -170,13 +169,15 @@ class RewardsPanel(QWidget):
         # -- the pool ---------------------------------------------------
         self.pool_group = QGroupBox("Reward pool")
         pool_form = QFormLayout(self.pool_group)
-        self.pool = QDoubleSpinBox()
+        self.pool = ReadableSpinBox()
         self.pool.setDecimals(0)
         self.pool.setRange(0, 1_000_000_000_000)
-        self.pool.setGroupSeparatorShown(True)
         self.pool.setSingleStep(1_000_000)
         self.pool.setToolTip(
-            "The most you are willing to pay out in total, across everyone"
+            "The most you are willing to pay out in total, across "
+            "everyone.\n\nWrite it plainly (1000000000), grouped "
+            "(1,000,000,000) or short (1B) \u2014 all three are read the "
+            "same way."
         )
         self.pool.valueChanged.connect(self._refresh_preview)
         pool_form.addRow("Maximum Reward Pool in Credits", self.pool)

@@ -45,9 +45,14 @@ def plain(value: float, decimals: int | None = None) -> str:
         return "—"
     if decimals is not None:
         return f"{value:,.{decimals}f}"
-    if abs(value - round(value)) < 1e-9:
+    if abs(value - round(value)) < 1e-12:
         return f"{round(value):,}"
-    return f"{value:,.2f}"
+
+    # Enough places to hold anything a criterion is likely to carry, then
+    # trimmed. Rounding to two would silently destroy a points-per-unit
+    # of 0.001, which is a perfectly reasonable thing to set.
+    text = f"{value:,.10f}".rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def compact(value: float, places: int = 2) -> str:
@@ -82,6 +87,69 @@ def compact(value: float, places: int = 2) -> str:
     return plain(value)
 
 
+#: Multipliers accepted when reading a number back from a field, so a
+#: value shown as ``250K`` can be typed straight back in.
+_MULTIPLIERS = {"k": 1_000.0, "m": 1_000_000.0, "b": 1_000_000_000.0, "t": 1e12}
+
+#: Characters people and locales use to group digits.
+_SEPARATORS = ",_' \u00a0\u202f"
+
+
+def parse(text: str) -> float | None:
+    """Read a number back from something a person typed or was shown.
+
+    Accepts the forms this module produces and the ones people reach for
+    anyway: ``1,000,000``, ``1 000 000``, ``250K``, ``4.3k``, ``1B``.
+    Returns ``None`` for anything empty, and raises :class:`ValueError`
+    for text that is not a number at all.
+
+    This exists because a field displaying ``1,000,000`` has to be
+    readable *and* editable. Showing a grouped number that the parser
+    then rejects is worse than showing no grouping at all.
+    """
+    cleaned = text.strip()
+    if not cleaned:
+        return None
+
+    for character in _SEPARATORS:
+        cleaned = cleaned.replace(character, "")
+    if not cleaned:
+        raise ValueError(f"'{text}' is not a number.")
+
+    multiplier = 1.0
+    suffix = cleaned[-1].lower()
+    if suffix in _MULTIPLIERS:
+        multiplier = _MULTIPLIERS[suffix]
+        cleaned = cleaned[:-1]
+        # A bare suffix such as "M" means nothing on its own.
+        if not cleaned or cleaned in "+-":
+            raise ValueError(f"'{text}' is not a number.")
+
+    try:
+        return float(cleaned) * multiplier
+    except ValueError as exc:
+        raise ValueError(f"'{text}' is not a number.") from exc
+
+
+def editable(value: float | None) -> str:
+    """Return a value for a field the user can edit and re-save.
+
+    Prefers the short form — ``250K``, ``1B`` — because that is what is
+    pleasant to read. Falls back to the grouped figure whenever the short
+    form would not read back as the same number, so opening a criterion
+    and saving it again can never quietly round the value that was set.
+    """
+    if value is None:
+        return ""
+    short = compact(value)
+    try:
+        if parse(short) == value:
+            return short
+    except ValueError:
+        pass
+    return plain(value)
+
+
 def credits(value: float, unit: str = "Cr", short: bool = False) -> str:
     """Return a credit amount, in full or abbreviated."""
     figure = compact(value) if short else plain(value, 0)
@@ -107,4 +175,12 @@ def percentage(value: float, places: int = 1) -> str:
     return f"{text}%"
 
 
-__all__ = ["compact", "credits", "percentage", "plain", "quantity"]
+__all__ = [
+    "compact",
+    "credits",
+    "editable",
+    "parse",
+    "percentage",
+    "plain",
+    "quantity",
+]
